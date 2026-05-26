@@ -1,0 +1,499 @@
+{
+  "projeto": {
+    "nome": "Sistema Solar",
+    "versao": "1.0",
+    "descricao": "Sistema de gestão para empresa de energia solar fotovoltaica. Cobre vendas, estoque, financeiro, comissões, projetos de homologação e ordens de serviço.",
+    "objetivo": "Substituir planilhas Excel por sistema integrado de uso local",
+    "publico_alvo": "Pequena empresa do setor solar (uso interno, gratuito)",
+    "status": "Em produção"
+  },
+
+  "tecnologias": {
+    "backend": {
+      "framework": "FastAPI",
+      "orm": "SQLAlchemy 2.x",
+      "banco": "SQLite (arquivo solar.db na raiz do projeto)",
+      "validacao": "Pydantic v2",
+      "migracao": "Alembic",
+      "hash_senha": "bcrypt",
+      "servidor": "uvicorn (host 127.0.0.1, porta 8000)"
+    },
+    "frontend": {
+      "framework": "Streamlit",
+      "porta": 8501,
+      "comunicacao": "HTTP REST via biblioteca requests"
+    },
+    "ambiente": {
+      "python": "3.11+",
+      "venv": ".venv (criado automaticamente pelo iniciar.bat)",
+      "plataforma": "Windows (desktop local)"
+    },
+    "dependencias": [
+      "fastapi", "uvicorn", "sqlalchemy", "pydantic",
+      "streamlit", "requests", "openpyxl", "alembic", "bcrypt"
+    ]
+  },
+
+  "estrutura_arquivos": {
+    "raiz": {
+      "iniciar.bat": "Launcher duplo-clique: cria venv, instala deps, aplica migrações Alembic, sobe uvicorn + Streamlit",
+      "requirements.txt": "Dependências Python do projeto",
+      "alembic.ini": "Configuração do Alembic (URL do banco: sqlite:///./solar.db)",
+      "solar.db": "Banco de dados SQLite (gerado automaticamente)",
+      "importar_projetos.py": "Script único para importar 88 projetos históricos do Excel"
+    },
+    "app": {
+      "main.py": "Entrypoint FastAPI: registra routers, cria tabelas, seed do admin inicial",
+      "database.py": "Engine SQLAlchemy, SessionLocal, Base, get_db()",
+      "enums.py": "Todos os Enums do sistema",
+      "models/": "Modelos SQLAlchemy (uma classe por arquivo)",
+      "schemas/": "Schemas Pydantic (Create, Update, Response por módulo)",
+      "routes/": "Routers FastAPI (um arquivo por módulo)"
+    },
+    "alembic": {
+      "env.py": "Configuração Alembic: importa Base + todos os models, render_as_batch=True para SQLite",
+      "versions/": "Arquivos de migração gerados automaticamente"
+    },
+    "streamlit_app": {
+      "app.py": "Página inicial (login + dashboard de KPIs)",
+      "api_client.py": "Funções centralizadas de chamada à API REST",
+      "auth.py": "Helpers: verificar_auth(), verificar_admin(), rodape_usuario()",
+      "pages/": "Páginas do sistema (numeradas para ordenação no menu)"
+    }
+  },
+
+  "autenticacao": {
+    "modelo": "Sessão simples via st.session_state (sem JWT, sem expiração)",
+    "armazenamento_senha": "bcrypt hash na tabela usuarios",
+    "perfis": {
+      "Admin": "Acesso total a todas as 9 páginas + gerenciamento de usuários",
+      "Vendedor": "Acesso a Clientes, Vendas, Estoque, Colaboradores, Projetos, OS. Bloqueado: Financeiro e Prestações de Contas"
+    },
+    "seed_automatico": "Se não existir nenhum usuário, cria admin/solar123 no startup da API",
+    "endpoint_login": "POST /usuarios/login (retorna dados do usuário se credenciais corretas)",
+    "logout": "Deleta st.session_state['usuario'] e redireciona para app.py"
+  },
+
+  "enums": {
+    "StatusCliente": ["Ativo", "Inativo", "Prospecto", "Bloqueado"],
+    "TipoPessoa": ["PF", "PJ"],
+    "Escolaridade": ["Fundamental", "Médio", "Superior", "Pós-graduação"],
+    "TipoImovel": ["Residencial", "Comercial", "Rural", "Industrial"],
+    "OrigemLead": ["Indicação", "Google", "Instagram", "Facebook", "WhatsApp", "Site", "Evento", "Outros"],
+    "CategoriaProduto": ["Painel", "Inversor", "Cabo", "Estrutura", "Acessório", "Serviço"],
+    "UnidadeProduto": ["UN", "M", "KG", "KWP"],
+    "StatusVenda": ["Orçamento", "Negociação", "Aprovado", "Em Andamento", "Concluído", "Cancelado"],
+    "FormaPagamento": ["PIX", "Boleto", "Dinheiro", "Cartão", "Financiamento"],
+    "TipoContrato": ["CLT", "Autônomo", "PJ"],
+    "StatusColaborador": ["Ativo", "Inativo"],
+    "TipoMovimento": ["Entrada", "Saída", "Ajuste+", "Ajuste-"],
+    "TipoLancamento": ["Receita", "Despesa"],
+    "CategoriaFinanceiro": ["Venda Equipamentos", "Serviço Instalação", "Manutenção", "Comissão", "Fornecedor", "Salário", "Aluguel", "Marketing", "Imposto", "Outras"],
+    "StatusPagamento": ["Pendente", "Pago", "Atrasado", "Cancelado"],
+    "StatusPrestacao": ["Pendente", "Paga", "Cancelada"],
+    "StatusProjeto": ["Em Análise", "Aprovado", "Aprovado c/ Obras", "Falta TRT", "Cancelado"],
+    "StatusVistoria": ["Não Solicitado", "Solicitado", "Realizado"],
+    "TipoServico": ["Preventiva", "Corretiva", "Limpeza", "Inspeção", "Garantia", "Outros"],
+    "StatusOS": ["Aberta", "Em Andamento", "Concluída", "Cancelada"],
+    "PerfilUsuario": ["Admin", "Vendedor"]
+  },
+
+  "modulos": {
+
+    "clientes": {
+      "tabela": "clientes",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "id":            { "tipo": "Integer", "pk": true },
+        "status":        { "tipo": "Enum(StatusCliente)", "default": "Ativo" },
+        "tipo_pessoa":   { "tipo": "Enum(TipoPessoa)", "default": "PF" },
+        "nome":          { "tipo": "String(150)", "obrigatorio": true },
+        "cpf_cnpj":      { "tipo": "String(14)", "unique": true, "nullable": true },
+        "email":         { "tipo": "String(100)", "nullable": true },
+        "telefone":      { "tipo": "String(20)", "nullable": true },
+        "cidade":        { "tipo": "String(100)", "nullable": true },
+        "uf":            { "tipo": "String(2)", "nullable": true },
+        "data_cadastro": { "tipo": "Date", "obrigatorio": true },
+        "profissao":     { "tipo": "String(100)", "nullable": true },
+        "renda_mensal":  { "tipo": "Numeric(12,2)", "nullable": true },
+        "escolaridade":  { "tipo": "Enum(Escolaridade)", "nullable": true },
+        "conta_energia": { "tipo": "Numeric(10,2)", "nullable": true },
+        "tipo_imovel":   { "tipo": "Enum(TipoImovel)", "nullable": true },
+        "origem_lead":   { "tipo": "Enum(OrigemLead)", "nullable": true },
+        "endereco":      { "tipo": "String(200)", "nullable": true },
+        "bairro":        { "tipo": "String(100)", "nullable": true }
+      },
+      "endpoints": [
+        { "metodo": "POST",   "rota": "/clientes/",          "descricao": "Cria novo cliente" },
+        { "metodo": "GET",    "rota": "/clientes/",          "descricao": "Lista todos os clientes" },
+        { "metodo": "GET",    "rota": "/clientes/{id}",      "descricao": "Busca cliente por ID" },
+        { "metodo": "PATCH",  "rota": "/clientes/{id}",      "descricao": "Atualiza dados do cliente" },
+        { "metodo": "DELETE", "rota": "/clientes/{id}",      "descricao": "Exclui cliente (bloqueado se tiver vendas; sugerir inativação)" }
+      ],
+      "regras": [
+        "cpf_cnpj é opcional para permitir importação histórica",
+        "DELETE bloqueado se cliente tiver vendas; mensagem orienta inativar",
+        "Campos de perfil (renda, escolaridade etc.) para análise estratégica de vendas"
+      ],
+      "pagina_streamlit": "01_Clientes.py"
+    },
+
+    "produtos": {
+      "tabela": "produtos",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "id":             { "tipo": "Integer", "pk": true },
+        "codigo":         { "tipo": "String(20)", "unique": true, "obrigatorio": true },
+        "nome":           { "tipo": "String(150)", "obrigatorio": true },
+        "categoria":      { "tipo": "Enum(CategoriaProduto)", "obrigatorio": true },
+        "unidade":        { "tipo": "Enum(UnidadeProduto)", "obrigatorio": true },
+        "fabricante":     { "tipo": "String(100)", "nullable": true },
+        "modelo":         { "tipo": "String(100)", "nullable": true },
+        "potencia_w":     { "tipo": "Numeric(10,2)", "nullable": true },
+        "custo_unitario": { "tipo": "Numeric(10,2)", "obrigatorio": true },
+        "preco_venda":    { "tipo": "Numeric(10,2)", "obrigatorio": true },
+        "qtd_minima":     { "tipo": "Integer", "default": 0 }
+      },
+      "propriedades_calculadas": {
+        "margem_pct":    "((preco_venda - custo_unitario) / preco_venda) * 100",
+        "qtd_estoque":   "Soma de movimentações (positivas - negativas)",
+        "alerta_estoque":"qtd_estoque < qtd_minima"
+      },
+      "endpoints": [
+        { "metodo": "POST",   "rota": "/produtos/",     "descricao": "Cadastra produto" },
+        { "metodo": "GET",    "rota": "/produtos/",     "descricao": "Lista produtos (com estoque e alerta calculados)" },
+        { "metodo": "GET",    "rota": "/produtos/{id}", "descricao": "Busca produto" },
+        { "metodo": "PATCH",  "rota": "/produtos/{id}", "descricao": "Atualiza produto" },
+        { "metodo": "DELETE", "rota": "/produtos/{id}", "descricao": "Exclui produto (bloqueado se tiver movimentações ou itens de venda)" }
+      ],
+      "pagina_streamlit": "03_Estoque.py"
+    },
+
+    "colaboradores": {
+      "tabela": "colaboradores",
+      "pk": "id_colaborador (String PK, formato COL001)",
+      "campos": {
+        "id_colaborador":      { "tipo": "String(6)", "pk": true, "formato": "COL001" },
+        "nome":                { "tipo": "String(150)", "obrigatorio": true },
+        "cpf":                 { "tipo": "String(11)", "unique": true, "obrigatorio": true },
+        "cargo":               { "tipo": "String(100)", "nullable": true },
+        "tipo_contrato":       { "tipo": "Enum(TipoContrato)", "obrigatorio": true },
+        "percentual_comissao": { "tipo": "Numeric(5,4)", "obrigatorio": true, "nota": "Armazenado como decimal: 0.05 = 5%" },
+        "telefone":            { "tipo": "String(20)", "nullable": true },
+        "email":               { "tipo": "String(100)", "nullable": true },
+        "data_admissao":       { "tipo": "Date", "obrigatorio": true },
+        "status":              { "tipo": "Enum(StatusColaborador)", "default": "Ativo" },
+        "observacoes":         { "tipo": "Text", "nullable": true }
+      },
+      "geracao_pk": "Consulta última PK, extrai número [3:], incrementa, formata COL{n:03d}",
+      "endpoints": [
+        { "metodo": "POST",   "rota": "/colaboradores/",      "descricao": "Cadastra colaborador" },
+        { "metodo": "GET",    "rota": "/colaboradores/",      "descricao": "Lista colaboradores" },
+        { "metodo": "GET",    "rota": "/colaboradores/{id}",  "descricao": "Busca colaborador" },
+        { "metodo": "PATCH",  "rota": "/colaboradores/{id}",  "descricao": "Atualiza colaborador" },
+        { "metodo": "DELETE", "rota": "/colaboradores/{id}",  "descricao": "Exclui colaborador (bloqueado se tiver vendas; sugere inativação)" }
+      ],
+      "pagina_streamlit": "06_Colaboradores.py"
+    },
+
+    "vendas": {
+      "tabela": "vendas",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "id":               { "tipo": "Integer", "pk": true },
+        "cliente_id":       { "tipo": "Integer FK clientes.id", "obrigatorio": true },
+        "id_responsavel":   { "tipo": "String(6) FK colaboradores.id_colaborador", "nullable": true },
+        "data_orcamento":   { "tipo": "Date", "obrigatorio": true },
+        "data_aprovacao":   { "tipo": "Date", "nullable": true },
+        "status_venda":     { "tipo": "Enum(StatusVenda)", "default": "Orçamento" },
+        "valor_instalacao": { "tipo": "Numeric(10,2)", "default": 0 },
+        "desconto":         { "tipo": "Numeric(10,2)", "default": 0 },
+        "forma_pagamento":  { "tipo": "Enum(FormaPagamento)", "obrigatorio": true },
+        "parcelas":         { "tipo": "Integer", "default": 1 },
+        "observacoes":      { "tipo": "Text", "nullable": true }
+      },
+      "tabela_itens": {
+        "nome": "itens_venda",
+        "campos": {
+          "id":             { "tipo": "Integer", "pk": true },
+          "venda_id":       { "tipo": "Integer FK vendas.id" },
+          "produto_id":     { "tipo": "Integer FK produtos.id" },
+          "quantidade":     { "tipo": "Numeric(10,3)" },
+          "preco_unitario": { "tipo": "Numeric(10,2)" }
+        }
+      },
+      "propriedades_calculadas": {
+        "valor_equipamentos": "Soma dos subtotais dos itens",
+        "valor_final":        "valor_equipamentos + valor_instalacao - desconto"
+      },
+      "endpoints": [
+        { "metodo": "POST",   "rota": "/vendas/",              "descricao": "Cria venda com itens (status inicial: Orçamento)" },
+        { "metodo": "GET",    "rota": "/vendas/",              "descricao": "Lista vendas" },
+        { "metodo": "GET",    "rota": "/vendas/{id}",          "descricao": "Busca venda" },
+        { "metodo": "PATCH",  "rota": "/vendas/{id}/aprovar",  "descricao": "Aprova venda (atomicamente: valida estoque, baixa estoque, gera lançamentos financeiros, gera prestação de contas)" },
+        { "metodo": "DELETE", "rota": "/vendas/{id}",          "descricao": "Exclui venda (somente status Orçamento)" }
+      ],
+      "regras_aprovacao": [
+        "Valida estoque de todos os itens antes de qualquer baixa",
+        "Baixa de estoque via EstoqueMovimentacao (SAIDA) para cada item",
+        "Gera Receita/Venda Equipamentos (Pendente)",
+        "Gera Receita/Serviço Instalação se valor_instalacao > 0 (Pendente)",
+        "Gera PrestacaoContas para o responsável se id_responsavel preenchido",
+        "Toda operação em um único db.commit() (atômica)"
+      ],
+      "pagina_streamlit": "02_Vendas.py"
+    },
+
+    "estoque": {
+      "tabela": "estoque_movimentacoes",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "id":             { "tipo": "Integer", "pk": true },
+        "data":           { "tipo": "DateTime", "default": "now()" },
+        "tipo_mov":       { "tipo": "Enum(TipoMovimento)", "obrigatorio": true },
+        "id_produto":     { "tipo": "Integer FK produtos.id", "obrigatorio": true },
+        "quantidade":     { "tipo": "Numeric(10,3)", "obrigatorio": true },
+        "valor_unitario": { "tipo": "Numeric(10,2)", "obrigatorio": true },
+        "id_venda":       { "tipo": "Integer FK vendas.id", "nullable": true },
+        "responsavel":    { "tipo": "String(150)", "nullable": true },
+        "observacoes":    { "tipo": "Text", "nullable": true }
+      },
+      "propriedades_calculadas": {
+        "sinal":       "1 se Entrada/Ajuste+, -1 se Saída/Ajuste-",
+        "valor_total": "quantidade * valor_unitario"
+      },
+      "endpoints": [
+        { "metodo": "GET",  "rota": "/estoque/produtos/{id}/saldo",  "descricao": "Saldo atual do produto (soma de movimentações)" },
+        { "metodo": "GET",  "rota": "/estoque/movimentacoes",        "descricao": "Lista movimentações" },
+        { "metodo": "POST", "rota": "/estoque/movimentacoes",        "descricao": "Registra movimentação manual (Entrada, Ajuste+, Ajuste-)" }
+      ],
+      "nota": "Movimentações SAIDA são criadas automaticamente pela aprovação de vendas",
+      "pagina_streamlit": "03_Estoque.py"
+    },
+
+    "financeiro": {
+      "tabela": "financeiro",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "id":               { "tipo": "Integer", "pk": true },
+        "tipo":             { "tipo": "Enum(TipoLancamento)", "obrigatorio": true },
+        "categoria":        { "tipo": "Enum(CategoriaFinanceiro)", "obrigatorio": true },
+        "descricao":        { "tipo": "String(200)", "obrigatorio": true },
+        "valor":            { "tipo": "Numeric(10,2)", "obrigatorio": true },
+        "data_vencimento":  { "tipo": "Date", "obrigatorio": true },
+        "data_pagamento":   { "tipo": "Date", "nullable": true },
+        "status_pagamento": { "tipo": "Enum(StatusPagamento)", "default": "Pendente" },
+        "forma_pagamento":  { "tipo": "Enum(FormaPagamento)", "obrigatorio": true },
+        "id_venda":         { "tipo": "Integer FK vendas.id", "nullable": true },
+        "observacoes":      { "tipo": "Text", "nullable": true }
+      },
+      "endpoints": [
+        { "metodo": "GET",   "rota": "/financeiro/",          "descricao": "Lista todos os lançamentos" },
+        { "metodo": "POST",  "rota": "/financeiro/",          "descricao": "Cria lançamento manual" },
+        { "metodo": "PATCH", "rota": "/financeiro/{id}/pagar","descricao": "Marca lançamento como Pago (define data_pagamento = hoje)" },
+        { "metodo": "GET",   "rota": "/financeiro/saldo",     "descricao": "Retorna saldo: receitas_pagas - despesas_pagas" }
+      ],
+      "origens_automaticas": [
+        "Aprovação de venda: Receita/Venda Equipamentos + Receita/Serviço Instalação",
+        "Pagamento de PrestacaoContas: Despesa/Comissão",
+        "Conclusão de OS (não-Garantia, custo > 0): Receita/Manutenção"
+      ],
+      "acesso": "Somente Admin",
+      "pagina_streamlit": "04_Financeiro.py"
+    },
+
+    "prestacao_contas": {
+      "tabela": "prestacao_contas",
+      "pk": "id_prestacao (String PK, formato PC0001)",
+      "campos": {
+        "id_prestacao":        { "tipo": "String(7)", "pk": true, "formato": "PC0001" },
+        "data":                { "tipo": "Date", "obrigatorio": true },
+        "id_venda":            { "tipo": "Integer FK vendas.id", "obrigatorio": true },
+        "id_colaborador":      { "tipo": "String(6) FK colaboradores.id_colaborador", "obrigatorio": true },
+        "valor_recebido":      { "tipo": "Numeric(10,2)", "obrigatorio": true },
+        "custo_instalacao":    { "tipo": "Numeric(10,2)", "default": 0 },
+        "percentual_comissao": { "tipo": "Numeric(5,4)", "obrigatorio": true },
+        "status_pagto":        { "tipo": "Enum(StatusPrestacao)", "default": "Pendente" },
+        "data_pagto":          { "tipo": "Date", "nullable": true },
+        "observacoes":         { "tipo": "Text", "nullable": true }
+      },
+      "propriedades_calculadas": {
+        "valor_comissao": "valor_recebido * percentual_comissao",
+        "valor_liquido":  "valor_recebido - valor_comissao"
+      },
+      "geracao_pk": "Consulta última PK, extrai número [2:], incrementa, formata PC{n:04d}",
+      "endpoints": [
+        { "metodo": "GET",   "rota": "/prestacoes/",          "descricao": "Lista prestações" },
+        { "metodo": "PATCH", "rota": "/prestacoes/{id}/pagar","descricao": "Paga comissão: marca como Paga e cria Despesa/Comissão no financeiro" }
+      ],
+      "regra_pagamento": "PATCH /pagar cria automaticamente lançamento Despesa/Comissão no financeiro com valor = valor_comissao",
+      "acesso": "Somente Admin",
+      "pagina_streamlit": "05_Prestacoes.py"
+    },
+
+    "projetos_homologacao": {
+      "tabela": "projetos_homologacao",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "id":              { "tipo": "Integer", "pk": true },
+        "cliente_id":      { "tipo": "Integer FK clientes.id", "nullable": true },
+        "uc":              { "tipo": "String(50)", "descricao": "Unidade Consumidora", "nullable": true },
+        "data_entrada":    { "tipo": "Date", "nullable": true },
+        "data_resultado":  { "tipo": "Date", "nullable": true },
+        "protocolo":       { "tipo": "String(50)", "nullable": true },
+        "status_projeto":  { "tipo": "Enum(StatusProjeto)", "default": "Em Análise" },
+        "status_vistoria": { "tipo": "Enum(StatusVistoria)", "default": "Não Solicitado" },
+        "kwp":             { "tipo": "Numeric(8,3)", "nullable": true },
+        "inversor":        { "tipo": "String(100)", "nullable": true },
+        "observacoes":     { "tipo": "Text", "nullable": true }
+      },
+      "endpoints": [
+        { "metodo": "POST",   "rota": "/projetos/",      "descricao": "Cadastra projeto" },
+        { "metodo": "GET",    "rota": "/projetos/",      "descricao": "Lista projetos" },
+        { "metodo": "GET",    "rota": "/projetos/{id}",  "descricao": "Busca projeto" },
+        { "metodo": "PATCH",  "rota": "/projetos/{id}",  "descricao": "Atualiza projeto" },
+        { "metodo": "DELETE", "rota": "/projetos/{id}",  "descricao": "Exclui projeto" }
+      ],
+      "importacao": "importar_projetos.py lê CONTROLE DE PROJETOS.xlsx (aba PROJETOS FINALIZADOS), normaliza nomes de clientes (remove anotações entre parênteses), converte datas seriais do Excel, cria clientes inexistentes, importa 88 projetos",
+      "pagina_streamlit": "07_Projetos.py"
+    },
+
+    "ordens_servico": {
+      "tabela": "ordens_servico",
+      "pk": "id_os (String PK, formato OS0001)",
+      "campos": {
+        "id_os":            { "tipo": "String(6)", "pk": true, "formato": "OS0001" },
+        "cliente_id":       { "tipo": "Integer FK clientes.id", "obrigatorio": true },
+        "id_tecnico":       { "tipo": "String(6) FK colaboradores.id_colaborador", "nullable": true },
+        "tipo_servico":     { "tipo": "Enum(TipoServico)", "obrigatorio": true },
+        "descricao":        { "tipo": "Text", "obrigatorio": true },
+        "status_os":        { "tipo": "Enum(StatusOS)", "default": "Aberta" },
+        "data_abertura":    { "tipo": "Date", "obrigatorio": true },
+        "data_agendamento": { "tipo": "Date", "nullable": true },
+        "data_conclusao":   { "tipo": "Date", "nullable": true },
+        "forma_pagamento":  { "tipo": "Enum(FormaPagamento)", "default": "PIX" },
+        "custo_total":      { "tipo": "Numeric(10,2)", "nullable": true },
+        "observacoes":      { "tipo": "Text", "nullable": true }
+      },
+      "geracao_pk": "Consulta última PK, extrai número [2:], incrementa, formata OS{n:04d}",
+      "endpoints": [
+        { "metodo": "POST",   "rota": "/ordens-servico/",      "descricao": "Abre nova OS" },
+        { "metodo": "GET",    "rota": "/ordens-servico/",      "descricao": "Lista OSs" },
+        { "metodo": "GET",    "rota": "/ordens-servico/{id}",  "descricao": "Busca OS" },
+        { "metodo": "PATCH",  "rota": "/ordens-servico/{id}",  "descricao": "Atualiza OS (ao concluir: gera receita automática)" },
+        { "metodo": "DELETE", "rota": "/ordens-servico/{id}",  "descricao": "Exclui OS" }
+      ],
+      "regra_conclusao": "Ao mudar status para Concluída: se tipo_servico != Garantia E custo_total > 0, cria automaticamente Financeiro(Receita/Manutenção, Pendente). data_conclusao preenchida automaticamente se não informada.",
+      "regra_garantia": "OS tipo Garantia nunca gera lançamento financeiro",
+      "pagina_streamlit": "08_Manutencao.py"
+    },
+
+    "usuarios": {
+      "tabela": "usuarios",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "id":          { "tipo": "Integer", "pk": true },
+        "nome":        { "tipo": "String(100)", "obrigatorio": true },
+        "login":       { "tipo": "String(50)", "unique": true, "obrigatorio": true },
+        "senha_hash":  { "tipo": "String(200)", "obrigatorio": true, "nota": "Hash bcrypt, nunca texto puro" },
+        "perfil":      { "tipo": "Enum(PerfilUsuario)", "default": "Vendedor" }
+      },
+      "endpoints": [
+        { "metodo": "POST",   "rota": "/usuarios/login",   "descricao": "Autentica usuário (retorna dados sem senha; 401 se inválido)" },
+        { "metodo": "GET",    "rota": "/usuarios/",        "descricao": "Lista usuários" },
+        { "metodo": "POST",   "rota": "/usuarios/",        "descricao": "Cria usuário" },
+        { "metodo": "PATCH",  "rota": "/usuarios/{id}",    "descricao": "Atualiza usuário (senha opcional: só atualiza se informada)" },
+        { "metodo": "DELETE", "rota": "/usuarios/{id}",    "descricao": "Exclui usuário (bloqueado se for o único cadastrado)" }
+      ],
+      "seed": "Na ausência de qualquer usuário, cria admin/solar123 automaticamente no startup",
+      "acesso_pagina": "Somente Admin",
+      "pagina_streamlit": "09_Usuarios.py"
+    },
+
+    "dashboard": {
+      "endpoint": "GET /dashboard/",
+      "kpis": {
+        "total_vendas":     "Contagem de todas as vendas",
+        "receita_aprovada": "Soma de valor_final das vendas com status Aprovado",
+        "pipeline":         "Soma de valor_final das vendas em Orçamento ou Negociação",
+        "saldo_financeiro": "Receitas pagas - Despesas pagas",
+        "ticket_medio":     "receita_aprovada / quantidade de vendas aprovadas",
+        "itens_em_alerta":  "Quantidade de produtos com qtd_estoque < qtd_minima",
+        "valor_em_estoque": "Soma de (custo_unitario * qtd_estoque) de todos os produtos"
+      },
+      "pagina_streamlit": "app.py (tela principal após login)"
+    }
+  },
+
+  "paginas_streamlit": [
+    { "arquivo": "app.py",             "titulo": "Login / Dashboard",           "acesso": "Público (login); Admin + Vendedor (dashboard)" },
+    { "arquivo": "01_Clientes.py",     "titulo": "Clientes",                    "acesso": "Admin + Vendedor", "abas": ["Lista", "Novo", "Editar/Excluir"] },
+    { "arquivo": "02_Vendas.py",       "titulo": "Vendas",                      "acesso": "Admin + Vendedor", "abas": ["Lista", "Nova Venda", "Aprovar/Excluir"] },
+    { "arquivo": "03_Estoque.py",      "titulo": "Estoque",                     "acesso": "Admin + Vendedor", "abas": ["Produtos", "Movimentações", "Novo Produto", "Editar/Excluir"] },
+    { "arquivo": "04_Financeiro.py",   "titulo": "Financeiro",                  "acesso": "Somente Admin",    "abas": ["Lançamentos", "Novo Lançamento"] },
+    { "arquivo": "05_Prestacoes.py",   "titulo": "Prestações de Contas",        "acesso": "Somente Admin",    "abas": ["Lista", "Pagar"] },
+    { "arquivo": "06_Colaboradores.py","titulo": "Colaboradores",               "acesso": "Admin + Vendedor", "abas": ["Lista", "Novo", "Editar/Excluir"] },
+    { "arquivo": "07_Projetos.py",     "titulo": "Projetos de Homologação",     "acesso": "Admin + Vendedor", "abas": ["Lista", "Novo", "Editar/Excluir"] },
+    { "arquivo": "08_Manutencao.py",   "titulo": "Ordens de Serviço",           "acesso": "Admin + Vendedor", "abas": ["Lista", "Nova OS", "Editar/Excluir"] },
+    { "arquivo": "09_Usuarios.py",     "titulo": "Usuários do Sistema",         "acesso": "Somente Admin",    "abas": ["Lista", "Novo", "Editar/Excluir"] }
+  ],
+
+  "fluxos_negocio": {
+    "ciclo_venda": [
+      "1. Cadastrar cliente",
+      "2. Cadastrar produtos com estoque disponível",
+      "3. Criar venda em Orçamento com itens",
+      "4. Aprovar venda: valida estoque → baixa estoque → gera receitas pendentes → gera prestação de contas",
+      "5. Dar baixa nas receitas em Financeiro (PATCH /pagar)",
+      "6. Pagar comissão em Prestações de Contas (gera despesa automática)"
+    ],
+    "ciclo_os": [
+      "1. Abrir OS para cliente com tipo e descrição",
+      "2. Agendar (data_agendamento)",
+      "3. Concluir: sistema gera Receita/Manutenção automaticamente (exceto Garantia)",
+      "4. Dar baixa na receita em Financeiro"
+    ],
+    "ciclo_homologacao": [
+      "1. Importar projetos históricos via importar_projetos.py (uma vez)",
+      "2. Cadastrar novos projetos pela página 07",
+      "3. Atualizar status conforme andamento (Em Análise → Aprovado etc.)",
+      "4. Registrar data de resultado e protocolo"
+    ]
+  },
+
+  "alembic": {
+    "url": "sqlite:///./solar.db",
+    "render_as_batch": true,
+    "descricao": "Necessário para SQLite que não suporta ALTER COLUMN nativo",
+    "fluxo_adicionar_campo": [
+      "1. Editar model em app/models/xxx.py",
+      "2. alembic revision --autogenerate -m 'descricao'",
+      "3. alembic upgrade head"
+    ],
+    "fluxo_iniciar_bat": "iniciar.bat executa alembic upgrade head automaticamente a cada abertura",
+    "comandos": {
+      "current":           "Mostra revisão atual do banco",
+      "history":           "Lista histórico de migrações",
+      "upgrade head":      "Aplica todas as migrações pendentes",
+      "downgrade -1":      "Desfaz a última migração",
+      "stamp head":        "Marca banco na revisão atual sem executar SQL"
+    }
+  },
+
+  "implantacao": {
+    "modo_atual": "Desktop local (Windows)",
+    "inicializacao": "iniciar.bat (duplo-clique)",
+    "passos_primeiro_uso": [
+      "Instalar Python 3.11+ com 'Add Python to PATH' marcado",
+      "Colocar pasta do projeto em qualquer diretório",
+      "Executar iniciar.bat (cria venv, instala deps, aplica migrações, sobe sistema)",
+      "Acessar http://localhost:8501 (abre automaticamente)",
+      "Login inicial: admin / solar123"
+    ],
+    "futuro": {
+      "relatorios_pdf": "Pendente — resumo de vendas, OS por período, extrato financeiro",
+      "deploy_online": "Railway ou Render + PostgreSQL",
+      "alembic_postgresql": "Remover render_as_batch ao migrar para Postgres"
+    }
+  }
+}
