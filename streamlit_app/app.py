@@ -23,6 +23,8 @@ if "usuario" not in st.session_state:
     st.title("☀️ MV Energia Solar")
     st.markdown("---")
 
+    st.caption(f"🔗 API: `{_api_url()}`")
+
     col_form, _, _ = st.columns([1, 1, 1])
     with col_form:
         with st.form("form_login"):
