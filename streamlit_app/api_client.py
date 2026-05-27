@@ -1,7 +1,14 @@
+import os
 import requests
 import streamlit as st
 
-BASE_URL = "http://127.0.0.1:8000"
+# Em produção: defina API_URL nos Secrets do Streamlit Cloud
+# Em desenvolvimento local: usa localhost
+BASE_URL = (
+    st.secrets.get("API_URL")          # Streamlit Cloud secrets
+    or os.getenv("API_URL")            # variável de ambiente local
+    or "http://127.0.0.1:8000"         # fallback desenvolvimento
+)
 
 
 def _get(url) -> list | dict:

@@ -10,3 +10,4 @@ bcrypt
 fpdf2
 plotly
 numpy
+psycopg2-binary
