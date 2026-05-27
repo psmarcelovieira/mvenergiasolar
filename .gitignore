@@ -21,10 +21,11 @@ __pycache__/
 dist/
 build/
 
-# Variáveis de ambiente
+# Variáveis de ambiente e secrets
 .env
 .env.local
 .env.production
+.streamlit/secrets.toml
 
 # IDEs
 .vscode/

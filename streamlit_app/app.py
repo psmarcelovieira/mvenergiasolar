@@ -1,16 +1,29 @@
 from typing import cast
+import os
 import streamlit as st
 import requests
 import api_client
 
 st.set_page_config(page_title="MV Energia Solar", page_icon="☀️", layout="wide")
 
-BASE_URL = "http://127.0.0.1:8000"
+
+def _api_url() -> str:
+    """Lê a URL da API em tempo de execução (não na importação)."""
+    try:
+        url = st.secrets["API_URL"]
+        if url:
+            return url.rstrip("/")
+    except Exception:
+        pass
+    return os.getenv("API_URL", "http://127.0.0.1:8000").rstrip("/")
+
 
 # ── TELA DE LOGIN ──────────────────────────────────────────────────────────────
 if "usuario" not in st.session_state:
     st.title("☀️ MV Energia Solar")
     st.markdown("---")
+
+    st.caption(f"🔗 API: `{_api_url()}`")
 
     col_form, _, _ = st.columns([1, 1, 1])
     with col_form:
@@ -24,11 +37,12 @@ if "usuario" not in st.session_state:
             if not login or not senha:
                 st.error("Preencha login e senha.")
             else:
+                BASE_URL = _api_url()
                 try:
                     resp = requests.post(
                         f"{BASE_URL}/usuarios/login",
                         json={"login": login, "senha": senha},
-                        timeout=5,
+                        timeout=10,
                     )
                     if resp.status_code == 200:
                         st.session_state["usuario"] = resp.json()
@@ -36,9 +50,11 @@ if "usuario" not in st.session_state:
                     elif resp.status_code == 401:
                         st.error("Login ou senha incorretos.")
                     else:
-                        st.error("Erro ao conectar com o servidor.")
+                        st.error(f"Erro {resp.status_code} ao conectar com o servidor.")
                 except requests.exceptions.ConnectionError:
-                    st.error("⚠️ API offline. Certifique-se de que o servidor está rodando.")
+                    st.error(f"⚠️ API offline. URL: `{BASE_URL}`")
+                except requests.exceptions.Timeout:
+                    st.error(f"⚠️ API demorou demais. URL: `{BASE_URL}`")
     st.stop()
 
 # ── DASHBOARD (usuário logado) ─────────────────────────────────────────────────
