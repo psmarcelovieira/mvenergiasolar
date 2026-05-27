@@ -5,7 +5,7 @@ import api_client
 
 st.set_page_config(page_title="MV Energia Solar", page_icon="☀️", layout="wide")
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = api_client.BASE_URL
 
 # ── TELA DE LOGIN ──────────────────────────────────────────────────────────────
 if "usuario" not in st.session_state:
