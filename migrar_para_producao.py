@@ -62,9 +62,14 @@ produtos_db = conn.execute("SELECT * FROM produtos").fetchall()
 print(f"Migrando {len(produtos_db)} produtos...")
 id_map_produtos = {}
 
+CAT = {"PAINEL": "Painel", "INVERSOR": "Inversor", "CABO": "Cabo",
+       "ESTRUTURA": "Estrutura", "ACESSORIO": "Acessório", "SERVICO": "Serviço"}
+
 for p in produtos_db:
     payload = {k: p[k] for k in p.keys()
                if k not in ("id",) and p[k] is not None}
+    if "categoria" in payload:
+        payload["categoria"] = CAT.get(payload["categoria"], payload["categoria"])
     resp = requests.post(f"{API_URL}/produtos/", json=payload, timeout=30)
     if resp.status_code in (200, 201):
         id_map_produtos[p["id"]] = resp.json()["id"]
@@ -97,7 +102,10 @@ for c in colab_db:
         print(f"  ERRO colaborador '{c['nome']}': {detail}")
 
 # ── PROJETOS ──────────────────────────────────────────────────────────────────
-projetos_db = conn.execute("SELECT * FROM projetos").fetchall()
+try:
+    projetos_db = conn.execute("SELECT * FROM projetos").fetchall()
+except Exception:
+    projetos_db = []
 print(f"Migrando {len(projetos_db)} projetos...")
 
 for p in projetos_db:
@@ -117,7 +125,10 @@ for p in projetos_db:
     _post("projetos", payload, f"projeto #{p['id']}")
 
 # ── ORDENS DE SERVIÇO ─────────────────────────────────────────────────────────
-os_db = conn.execute("SELECT * FROM ordens_servico").fetchall()
+try:
+    os_db = conn.execute("SELECT * FROM ordens_servico").fetchall()
+except Exception:
+    os_db = []
 print(f"Migrando {len(os_db)} ordens de serviço...")
 
 for o in os_db:
@@ -136,7 +147,10 @@ for o in os_db:
     _post("ordens-servico", payload, f"OS #{o['id_os']}")
 
 # ── FINANCEIRO ────────────────────────────────────────────────────────────────
-lanc_db = conn.execute("SELECT * FROM lancamentos").fetchall()
+try:
+    lanc_db = conn.execute("SELECT * FROM lancamentos").fetchall()
+except Exception:
+    lanc_db = []
 print(f"Migrando {len(lanc_db)} lançamentos financeiros...")
 
 for l in lanc_db:
