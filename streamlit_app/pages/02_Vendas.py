@@ -52,6 +52,8 @@ with tab_lista:
             col.markdown(f"**{titulo}**")
         st.divider()
 
+        CANCELAVEIS = {"Orçamento", "Negociação", "Aprovado", "Em Andamento", "Concluído"}
+
         for v in resultado:
             status = v["status_venda"]
             col1, col2, col3, col4, col5, col6 = st.columns([1, 3, 2, 2, 2, 2])
@@ -62,7 +64,7 @@ with tab_lista:
             col5.write(v["data_orcamento"])
 
             if status == "Orçamento":
-                btn_apr, btn_del = col6.columns(2)
+                btn_apr, btn_del, btn_canc = col6.columns(3)
                 if btn_apr.button("✅", key=f"apr_{v['id']}", help="Aprovar venda"):
                     resp = api_client.aprovar_venda(v["id"])
                     if resp.status_code == 200:
@@ -77,6 +79,70 @@ with tab_lista:
                         st.rerun()
                     else:
                         st.error(resp.json().get("detail"))
+                if btn_canc.button("🚫", key=f"canc_btn_{v['id']}", help="Cancelar venda"):
+                    st.session_state[f"cancelar_{v['id']}"] = True
+
+            elif status in CANCELAVEIS - {"Orçamento"}:
+                if col6.button("🚫 Cancelar", key=f"canc_btn_{v['id']}", help="Cancelar venda"):
+                    st.session_state[f"cancelar_{v['id']}"] = True
+
+            # ── Modal de cancelamento ──────────────────────────────────────────
+            if st.session_state.get(f"cancelar_{v['id']}"):
+                with st.expander(f"🚫 Cancelar Venda #{v['id']} — Autorização Administrativa",
+                                 expanded=True):
+                    st.warning(
+                        "Esta ação é **irreversível**. "
+                        "O cancelamento será registrado com trilha de auditoria.",
+                        icon="⚠️",
+                    )
+                    if status in {"Aprovado", "Em Andamento", "Concluído"}:
+                        st.info("✅ Estoque será revertido automaticamente.", icon="📦")
+                        st.info("✅ Lançamentos financeiros pendentes serão cancelados.", icon="💰")
+
+                    motivo = st.text_area(
+                        "Motivo do cancelamento *",
+                        placeholder="Descreva o motivo (mínimo 10 caracteres)...",
+                        key=f"motivo_{v['id']}",
+                    )
+                    st.markdown("**Credenciais do Administrador**")
+                    col_a, col_b = st.columns(2)
+                    admin_login = col_a.text_input("Login do Admin *", key=f"adm_login_{v['id']}")
+                    admin_senha = col_b.text_input("Senha do Admin *", type="password",
+                                                   key=f"adm_senha_{v['id']}")
+
+                    col_conf, col_abort = st.columns([1, 3])
+                    if col_conf.button("Confirmar Cancelamento", type="primary",
+                                       key=f"conf_canc_{v['id']}"):
+                        usuario_logado = st.session_state.get("usuario", {})
+                        if not motivo or len(motivo.strip()) < 10:
+                            st.error("Motivo deve ter pelo menos 10 caracteres.")
+                        elif not admin_login or not admin_senha:
+                            st.error("Informe as credenciais do administrador.")
+                        else:
+                            resp = api_client.cancelar_venda(
+                                venda_id          = v["id"],
+                                solicitante_login = usuario_logado.get("login", ""),
+                                autorizador_login = admin_login,
+                                autorizador_senha = admin_senha,
+                                motivo            = motivo,
+                            )
+                            if resp.status_code == 200:
+                                dados_canc = resp.json()
+                                st.success(
+                                    f"Venda #{v['id']} cancelada por "
+                                    f"**{dados_canc['autorizador_nome']}**. "
+                                    f"Estoque revertido: {'✅' if dados_canc['estoque_revertido'] else '—'} | "
+                                    f"Financeiro tratado: {'✅' if dados_canc['financeiro_tratado'] else '—'}"
+                                )
+                                del st.session_state[f"cancelar_{v['id']}"]
+                                st.rerun()
+                            else:
+                                detalhe = resp.json().get("detail", "Erro desconhecido")
+                                st.error(f"Cancelamento recusado: {detalhe}")
+
+                    if col_abort.button("Voltar", key=f"abort_canc_{v['id']}"):
+                        del st.session_state[f"cancelar_{v['id']}"]
+                        st.rerun()
 
 # ── NOVA VENDA ─────────────────────────────────────────────────────────────────
 with tab_nova:

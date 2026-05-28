@@ -21,6 +21,7 @@ from app.database import Base
 from app.models import (  # noqa: F401
     cliente, produto, venda, item_venda, colaborador,
     estoque, financeiro, prestacao_contas, projeto, ordem_servico, usuario,
+    cancelamento_venda,
 )
 
 target_metadata = Base.metadata
