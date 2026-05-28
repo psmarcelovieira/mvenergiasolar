@@ -3,11 +3,6 @@ from datetime import date, timedelta
 import api_client
 import pdf_reports
 
-st.set_page_config(page_title="Relatórios PDF", layout="wide")
-from auth import verificar_auth, rodape_usuario
-verificar_auth()
-rodape_usuario()
-
 st.title("📄 Relatórios em PDF")
 
 tab_proposta, tab_financeiro, tab_os = st.tabs([

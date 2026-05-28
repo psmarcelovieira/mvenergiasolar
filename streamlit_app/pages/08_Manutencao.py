@@ -2,10 +2,6 @@ import streamlit as st
 from datetime import date
 import api_client
 
-st.set_page_config(page_title="Ordens de Serviço", layout="wide")
-from auth import verificar_auth, rodape_usuario
-verificar_auth()
-rodape_usuario()
 st.title("🔧 Ordens de Serviço")
 
 STATUS_ICONE  = {"Aberta": "🟡", "Em Andamento": "🔵", "Concluída": "🟢", "Cancelada": "🔴"}

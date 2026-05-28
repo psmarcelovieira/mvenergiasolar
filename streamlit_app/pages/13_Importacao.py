@@ -10,11 +10,6 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 import api_client
 
-st.set_page_config(page_title="Importação em Lote", layout="wide")
-from auth import verificar_auth, rodape_usuario
-verificar_auth()
-rodape_usuario()
-
 st.title("📥 Importação em Lote")
 st.caption("Baixe o template, preencha no Excel e faça upload para importar vários registros de uma vez.")
 

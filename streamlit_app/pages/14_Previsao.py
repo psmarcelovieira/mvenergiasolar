@@ -4,11 +4,6 @@ import numpy as np
 import plotly.graph_objects as go
 import api_client
 
-st.set_page_config(page_title="Previsão de Vendas", layout="wide")
-from auth import verificar_auth, rodape_usuario
-verificar_auth()
-rodape_usuario()
-
 st.title("📈 Previsão de Vendas")
 
 # ── DADOS ─────────────────────────────────────────────────────────────────────

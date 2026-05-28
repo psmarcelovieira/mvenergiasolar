@@ -1,11 +1,6 @@
 import streamlit as st
 import api_client
 
-st.set_page_config(page_title="Usuários", layout="wide")
-from auth import verificar_admin, rodape_usuario
-verificar_admin()
-rodape_usuario()
-
 st.title("🔐 Usuários do Sistema")
 
 PERFIS = ["Admin", "Vendedor"]

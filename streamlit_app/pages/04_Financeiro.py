@@ -2,10 +2,6 @@ import streamlit as st
 import pandas as pd
 import api_client
 
-st.set_page_config(page_title="Financeiro", layout="wide")
-from auth import verificar_admin, rodape_usuario
-verificar_admin()
-rodape_usuario()
 st.title("💰 Financeiro")
 
 TIPO_ICONE = {"Receita": "🟢", "Despesa": "🔴"}
