@@ -77,6 +77,18 @@ def criar_venda(dados: dict):
 def aprovar_venda(venda_id: int):
     return requests.patch(f"{BASE_URL}/vendas/{venda_id}/aprovar")
 
+def cancelar_venda(venda_id: int, solicitante_login: str,
+                   autorizador_login: str, autorizador_senha: str, motivo: str):
+    return requests.post(f"{BASE_URL}/vendas/{venda_id}/cancelar", json={
+        "solicitante_login": solicitante_login,
+        "autorizador_login": autorizador_login,
+        "autorizador_senha": autorizador_senha,
+        "motivo":            motivo,
+    })
+
+def buscar_cancelamento(venda_id: int):
+    return requests.get(f"{BASE_URL}/vendas/{venda_id}/cancelamento")
+
 def excluir_venda(venda_id: int):
     return requests.delete(f"{BASE_URL}/vendas/{venda_id}")
 

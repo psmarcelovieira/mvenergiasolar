@@ -12,6 +12,7 @@ from app.models import financeiro as _f
 from app.models import prestacao_contas as _pc
 from app.models import projeto as _proj
 from app.models import ordem_servico as _os
+from app.models import cancelamento_venda as _cv
 from app.models.usuario import Usuario
 from app.enums import PerfilUsuario
 from app.routes import (

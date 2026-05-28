@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 # Railway fornece DATABASE_URL com prefixo "postgres://", SQLAlchemy exige "postgresql://"
-_url = os.getenv("DATABASE_URL", "sqlite:///./solar.db")
+_url = os.getenv("DATABASE_URL") or "sqlite:///./solar.db"
 DATABASE_URL = _url.replace("postgres://", "postgresql://", 1)
 
 _is_sqlite = DATABASE_URL.startswith("sqlite")

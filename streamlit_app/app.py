@@ -8,7 +8,6 @@ st.set_page_config(page_title="MV Energia Solar", page_icon="☀️", layout="wi
 
 
 def _api_url() -> str:
-    """Lê a URL da API em tempo de execução (não na importação)."""
     try:
         url = st.secrets["API_URL"]
         if url:
@@ -20,17 +19,18 @@ def _api_url() -> str:
 
 # ── TELA DE LOGIN ──────────────────────────────────────────────────────────────
 if "usuario" not in st.session_state:
-    st.title("☀️ MV Energia Solar")
-    st.markdown("---")
-
-    st.caption(f"🔗 API: `{_api_url()}`")
-
-    col_form, _, _ = st.columns([1, 1, 1])
+    _, col_form, _ = st.columns([1, 1, 1])
     with col_form:
+        st.markdown(
+            "<h2 style='text-align:center;margin-bottom:0'>☀️ MV Energia Solar</h2>"
+            "<p style='text-align:center;color:gray;margin-top:4px'>Sistema de Gestão</p>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("---")
+
         with st.form("form_login"):
-            st.subheader("Acesso ao Sistema")
-            login = st.text_input("Login")
-            senha = st.text_input("Senha", type="password")
+            login = st.text_input("Login", placeholder="seu.login")
+            senha = st.text_input("Senha", type="password", placeholder="••••••••")
             entrar = st.form_submit_button("Entrar", type="primary", use_container_width=True)
 
         if entrar:
@@ -47,23 +47,25 @@ if "usuario" not in st.session_state:
                     if resp.status_code == 200:
                         st.session_state["usuario"] = resp.json()
                         st.rerun()
-                    elif resp.status_code == 401:
-                        st.error("Login ou senha incorretos.")
                     else:
-                        st.error(f"Erro {resp.status_code} ao conectar com o servidor.")
+                        detalhe = resp.json().get("detail", "Erro desconhecido")
+                        if resp.status_code == 429:
+                            st.warning(f"🔒 {detalhe}")
+                        else:
+                            st.error(f"❌ {detalhe}")
                 except requests.exceptions.ConnectionError:
-                    st.error(f"⚠️ API offline. URL: `{BASE_URL}`")
+                    st.error("⚠️ API offline. Tente novamente em instantes.")
                 except requests.exceptions.Timeout:
-                    st.error(f"⚠️ API demorou demais. URL: `{BASE_URL}`")
+                    st.error("⚠️ API demorou demais. Tente novamente.")
     st.stop()
 
-# ── DASHBOARD (usuário logado) ─────────────────────────────────────────────────
+# ── DASHBOARD ─────────────────────────────────────────────────────────────────
 from auth import rodape_usuario  # noqa: E402
 rodape_usuario()
 
 usuario = st.session_state["usuario"]
-st.title("☀️ MV Energia Solar - Dashboard")
-st.caption(f"Bem-vindo, **{usuario['nome']}**!")
+st.title("☀️ MV Energia Solar")
+st.markdown(f"Bem-vindo de volta, **{usuario['nome']}**! 👋")
 st.markdown("---")
 
 try:
@@ -73,10 +75,10 @@ except Exception:
     st.stop()
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Total de Vendas",     dados["total_vendas"])
-col2.metric("Receita Aprovada",    f"R$ {dados['receita_aprovada']:,.2f}")
-col3.metric("Pipeline",            f"R$ {dados['pipeline']:,.2f}")
-col4.metric("Saldo Financeiro",    f"R$ {dados['saldo_financeiro']:,.2f}")
+col1.metric("Total de Vendas",  dados["total_vendas"])
+col2.metric("Receita Aprovada", f"R$ {dados['receita_aprovada']:,.2f}")
+col3.metric("Pipeline",         f"R$ {dados['pipeline']:,.2f}")
+col4.metric("Saldo Financeiro", f"R$ {dados['saldo_financeiro']:,.2f}")
 
 st.markdown("---")
 col5, col6, col7 = st.columns(3)

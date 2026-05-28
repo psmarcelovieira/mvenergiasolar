@@ -1,8 +1,9 @@
 import bcrypt
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.usuario import Usuario
+from app.models.usuario import Usuario, MAX_TENTATIVAS, BLOQUEIO_MINUTOS
 from app.schemas.usuario import UsuarioCreate, UsuarioUpdate, UsuarioResponse, LoginRequest
 
 router = APIRouter(prefix="/usuarios", tags=["Usuários"])
@@ -19,8 +20,45 @@ def _verificar(senha: str, hash_: str) -> bool:
 @router.post("/login", response_model=UsuarioResponse)
 def login(dados: LoginRequest, db: Session = Depends(get_db)):
     usuario = db.query(Usuario).filter(Usuario.login == dados.login).first()
-    if not usuario or not _verificar(dados.senha, usuario.senha_hash):
+
+    if not usuario:
         raise HTTPException(status_code=401, detail="Login ou senha incorretos")
+
+    agora = datetime.now()
+
+    # Conta bloqueada por tentativas excessivas
+    if usuario.bloqueado_ate and usuario.bloqueado_ate > agora:
+        restante = int((usuario.bloqueado_ate - agora).total_seconds() / 60) + 1
+        raise HTTPException(
+            status_code=429,
+            detail=f"Conta bloqueada. Tente novamente em {restante} minuto(s).",
+        )
+
+    # Senha incorreta
+    if not _verificar(dados.senha, usuario.senha_hash):
+        usuario.tentativas_falhas = (usuario.tentativas_falhas or 0) + 1
+        if usuario.tentativas_falhas >= MAX_TENTATIVAS:
+            usuario.bloqueado_ate = agora + timedelta(minutes=BLOQUEIO_MINUTOS)
+            db.commit()
+            raise HTTPException(
+                status_code=429,
+                detail=f"Conta bloqueada após {MAX_TENTATIVAS} tentativas. "
+                       f"Aguarde {BLOQUEIO_MINUTOS} minuto(s).",
+            )
+        db.commit()
+        restantes = MAX_TENTATIVAS - usuario.tentativas_falhas
+        raise HTTPException(
+            status_code=401,
+            detail=f"Login ou senha incorretos. "
+                   f"{restantes} tentativa(s) antes do bloqueio.",
+        )
+
+    # Sucesso: reseta contadores e registra último acesso
+    usuario.tentativas_falhas = 0
+    usuario.bloqueado_ate     = None
+    usuario.ultimo_login      = agora
+    db.commit()
+    db.refresh(usuario)
     return usuario
 
 

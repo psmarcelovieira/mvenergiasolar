@@ -13,9 +13,10 @@ router = APIRouter(prefix="/clientes", tags=["Clientes"])
 
 @router.post("/", response_model=ClienteResponse, status_code=201)
 def criar_cliente(dados: ClienteCreate, db: Session = Depends(get_db)):
-    existente = db.query(Cliente).filter(Cliente.cpf_cnpj == dados.cpf_cnpj).first()
-    if existente:
-        raise HTTPException(status_code=409, detail="CPF/CNPJ já cadastrado")
+    if dados.cpf_cnpj is not None:
+        existente = db.query(Cliente).filter(Cliente.cpf_cnpj == dados.cpf_cnpj).first()
+        if existente:
+            raise HTTPException(status_code=409, detail="CPF/CNPJ já cadastrado")
 
     cliente = Cliente(
         **dados.model_dump(),
