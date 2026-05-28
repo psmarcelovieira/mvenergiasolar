@@ -8,6 +8,7 @@ Create Date: 2026-05-27 00:01:00.000000
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 
 revision: str = 'b7e2a4f1c5d3'
@@ -17,15 +18,27 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column('usuarios', sa.Column(
-        'colaborador_id', sa.String(6),
-        sa.ForeignKey('colaboradores.id_colaborador'),
-        nullable=True,
-    ))
-    op.add_column('usuarios', sa.Column('ultimo_login',      sa.DateTime(), nullable=True))
-    op.add_column('usuarios', sa.Column('tentativas_falhas', sa.Integer(),  nullable=False,
-                                        server_default='0'))
-    op.add_column('usuarios', sa.Column('bloqueado_ate',     sa.DateTime(), nullable=True))
+    bind = op.get_bind()
+    inspector = inspect(bind)
+
+    if 'usuarios' not in inspector.get_table_names():
+        return  # tabela será criada pelo create_all com o schema atual
+
+    existing = {c['name'] for c in inspector.get_columns('usuarios')}
+
+    if 'colaborador_id' not in existing:
+        op.add_column('usuarios', sa.Column(
+            'colaborador_id', sa.String(6),
+            sa.ForeignKey('colaboradores.id_colaborador'),
+            nullable=True,
+        ))
+    if 'ultimo_login' not in existing:
+        op.add_column('usuarios', sa.Column('ultimo_login', sa.DateTime(), nullable=True))
+    if 'tentativas_falhas' not in existing:
+        op.add_column('usuarios', sa.Column('tentativas_falhas', sa.Integer(), nullable=False,
+                                            server_default='0'))
+    if 'bloqueado_ate' not in existing:
+        op.add_column('usuarios', sa.Column('bloqueado_ate', sa.DateTime(), nullable=True))
 
 
 def downgrade() -> None:
