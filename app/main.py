@@ -22,6 +22,12 @@ from app.routes import (
 
 Base.metadata.create_all(bind=engine)
 
+from app.database import DATABASE_URL as _DB_URL
+print("=" * 60)
+print(f"  DATABASE: {'PostgreSQL' if _DB_URL.startswith('postgresql') else 'SQLite (FALLBACK!)'}")
+print(f"  URL prefix: {_DB_URL[:40]}...")
+print("=" * 60)
+
 
 def _seed_admin():
     db = SessionLocal()
