@@ -2,10 +2,6 @@ import streamlit as st
 import pandas as pd
 import api_client
 
-st.set_page_config(page_title="Estoque", layout="wide")
-from auth import verificar_auth, rodape_usuario
-verificar_auth()
-rodape_usuario()
 st.title("📦 Estoque")
 
 tab_saldo, tab_mov, tab_novo, tab_edit = st.tabs(["📊 Saldo por Produto", "📝 Registrar Movimentação", "➕ Novo Produto", "✏️ Editar / Excluir"])

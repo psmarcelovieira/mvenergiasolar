@@ -8,6 +8,7 @@ Create Date: 2026-05-27 00:00:00.000000
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 
 revision: str = 'a3f8c1d2e9b0'
@@ -17,27 +18,25 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        'cancelamentos_venda',
-        sa.Column('id',                 sa.Integer(),   nullable=False),
-        sa.Column('venda_id',           sa.Integer(),   nullable=False),
-        sa.Column('solicitante_id',     sa.Integer(),   nullable=False),
-        sa.Column('autorizador_id',     sa.Integer(),   nullable=False),
-        sa.Column('motivo',             sa.Text(),      nullable=False),
-        sa.Column('data_cancelamento',  sa.DateTime(),  nullable=False),
-        sa.Column('estoque_revertido',  sa.Boolean(),   nullable=False, server_default='false'),
-        sa.Column('financeiro_tratado', sa.Boolean(),   nullable=False, server_default='false'),
-        sa.ForeignKeyConstraint(['venda_id'],       ['vendas.id']),
-        sa.ForeignKeyConstraint(['solicitante_id'], ['usuarios.id']),
-        sa.ForeignKeyConstraint(['autorizador_id'], ['usuarios.id']),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('venda_id'),
-    )
-    op.create_index('ix_cancelamentos_venda_id', 'cancelamentos_venda', ['id'])
-
-    # Garante que StatusPagamento.CANCELADO existe no enum do PostgreSQL
-    # (SQLite ignora, PostgreSQL precisa do valor no tipo)
-    op.execute("ALTER TYPE statuspagamento ADD VALUE IF NOT EXISTS 'Cancelado'")
+    bind = op.get_bind()
+    if 'cancelamentos_venda' not in inspect(bind).get_table_names():
+        op.create_table(
+            'cancelamentos_venda',
+            sa.Column('id',                 sa.Integer(),   nullable=False),
+            sa.Column('venda_id',           sa.Integer(),   nullable=False),
+            sa.Column('solicitante_id',     sa.Integer(),   nullable=False),
+            sa.Column('autorizador_id',     sa.Integer(),   nullable=False),
+            sa.Column('motivo',             sa.Text(),      nullable=False),
+            sa.Column('data_cancelamento',  sa.DateTime(),  nullable=False),
+            sa.Column('estoque_revertido',  sa.Boolean(),   nullable=False, server_default='false'),
+            sa.Column('financeiro_tratado', sa.Boolean(),   nullable=False, server_default='false'),
+            sa.ForeignKeyConstraint(['venda_id'],       ['vendas.id']),
+            sa.ForeignKeyConstraint(['solicitante_id'], ['usuarios.id']),
+            sa.ForeignKeyConstraint(['autorizador_id'], ['usuarios.id']),
+            sa.PrimaryKeyConstraint('id'),
+            sa.UniqueConstraint('venda_id'),
+        )
+        op.create_index('ix_cancelamentos_venda_id', 'cancelamentos_venda', ['id'])
 
 
 def downgrade() -> None:

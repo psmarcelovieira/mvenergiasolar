@@ -1,11 +1,6 @@
 import streamlit as st
 import api_client
 
-st.set_page_config(page_title="Ficha do Cliente", layout="wide")
-from auth import verificar_auth, rodape_usuario
-verificar_auth()
-rodape_usuario()
-
 st.title("📋 Ficha do Cliente")
 
 clientes = api_client.listar_clientes()

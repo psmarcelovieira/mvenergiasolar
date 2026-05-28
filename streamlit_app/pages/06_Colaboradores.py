@@ -1,10 +1,6 @@
 import streamlit as st
 import api_client
 
-st.set_page_config(page_title="Colaboradores", layout="wide")
-from auth import verificar_auth, rodape_usuario
-verificar_auth()
-rodape_usuario()
 st.title("👥 Colaboradores")
 
 STATUS_ICONE = {"Ativo": "🟢", "Inativo": "⚫"}

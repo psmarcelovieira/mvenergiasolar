@@ -3,11 +3,6 @@ import pandas as pd
 from datetime import date, timedelta
 import api_client
 
-st.set_page_config(page_title="Prospecção", layout="wide")
-from auth import verificar_auth, rodape_usuario
-verificar_auth()
-rodape_usuario()
-
 st.title("🎯 Painel de Prospecção")
 
 clientes = api_client.listar_clientes()

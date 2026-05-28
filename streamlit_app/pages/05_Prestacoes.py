@@ -1,10 +1,6 @@
 import streamlit as st
 import api_client
 
-st.set_page_config(page_title="Prestações de Contas", layout="wide")
-from auth import verificar_admin, rodape_usuario
-verificar_admin()
-rodape_usuario()
 st.title("🤝 Prestações de Contas")
 
 STATUS_ICONE = {"Pendente": "🟡", "Paga": "✅"}

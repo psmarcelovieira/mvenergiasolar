@@ -2,10 +2,6 @@ import streamlit as st
 import pandas as pd
 import api_client
 
-st.set_page_config(page_title="Clientes", layout="wide")
-from auth import verificar_auth, rodape_usuario
-verificar_auth()
-rodape_usuario()
 st.title("👥 Clientes")
 
 UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS",

@@ -1,8 +1,6 @@
-from typing import cast
 import os
 import streamlit as st
 import requests
-import api_client
 
 st.set_page_config(page_title="MV Energia Solar", page_icon="☀️", layout="wide")
 
@@ -59,35 +57,45 @@ if "usuario" not in st.session_state:
                     st.error("⚠️ API demorou demais. Tente novamente.")
     st.stop()
 
-# ── DASHBOARD ─────────────────────────────────────────────────────────────────
+# ── SIDEBAR: usuário logado ────────────────────────────────────────────────────
 from auth import rodape_usuario  # noqa: E402
 rodape_usuario()
 
+# ── NAVEGAÇÃO POR GRUPOS ───────────────────────────────────────────────────────
 usuario = st.session_state["usuario"]
-st.title("☀️ MV Energia Solar")
-st.markdown(f"Bem-vindo de volta, **{usuario['nome']}**! 👋")
-st.markdown("---")
+is_admin = usuario["perfil"] == "Admin"
 
-try:
-    dados = cast(dict, api_client.get_dashboard())
-except Exception:
-    st.error("API offline. Verifique se o servidor FastAPI está rodando.")
-    st.stop()
+_pages: dict = {
+    "Início": [
+        st.Page("pages/dashboard.py",        title="Dashboard",        icon="🏠"),
+    ],
+    "Comercial": [
+        st.Page("pages/01_Clientes.py",       title="Clientes",         icon="👥"),
+        st.Page("pages/02_Vendas.py",         title="Vendas",           icon="🛒"),
+        st.Page("pages/10_Ficha_Cliente.py",  title="Ficha do Cliente", icon="📋"),
+        st.Page("pages/11_Prospeccao.py",     title="Prospecção",       icon="🎯"),
+    ],
+    "Operações": [
+        st.Page("pages/07_Projetos.py",       title="Projetos",         icon="⚡"),
+        st.Page("pages/08_Manutencao.py",     title="Manutenção",       icon="🔧"),
+        st.Page("pages/03_Estoque.py",        title="Estoque",          icon="📦"),
+    ],
+    "Relatórios": [
+        st.Page("pages/12_Relatorios.py",     title="Relatórios PDF",   icon="📄"),
+        st.Page("pages/14_Previsao.py",       title="Previsão de Vendas", icon="📈"),
+    ],
+}
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Total de Vendas",  dados["total_vendas"])
-col2.metric("Receita Aprovada", f"R$ {dados['receita_aprovada']:,.2f}")
-col3.metric("Pipeline",         f"R$ {dados['pipeline']:,.2f}")
-col4.metric("Saldo Financeiro", f"R$ {dados['saldo_financeiro']:,.2f}")
+if is_admin:
+    _pages["Financeiro"] = [
+        st.Page("pages/04_Financeiro.py",     title="Lançamentos",      icon="💰"),
+        st.Page("pages/05_Prestacoes.py",     title="Prestações",       icon="🤝"),
+    ]
+    _pages["Administração"] = [
+        st.Page("pages/06_Colaboradores.py",  title="Colaboradores",    icon="👤"),
+        st.Page("pages/09_Usuarios.py",       title="Usuários",         icon="🔑"),
+        st.Page("pages/13_Importacao.py",     title="Importação",       icon="📂"),
+    ]
 
-st.markdown("---")
-col5, col6, col7 = st.columns(3)
-col5.metric("Ticket Médio",     f"R$ {dados['ticket_medio']:,.2f}")
-col7.metric("Valor em Estoque", f"R$ {dados['valor_em_estoque']:,.2f}")
-
-alerta = dados["itens_em_alerta"]
-with col6:
-    if alerta > 0:
-        st.metric("⚠️ Itens em Alerta", alerta)
-    else:
-        st.metric("✅ Itens em Alerta", alerta)
+pg = st.navigation(_pages)
+pg.run()
