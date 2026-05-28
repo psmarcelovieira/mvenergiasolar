@@ -11,7 +11,7 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 @router.get("/")
 def get_dashboard(db: Session = Depends(get_db)):
-    todas_vendas     = db.query(Venda).all()
+    todas_vendas     = db.query(Venda).filter(Venda.status_venda != StatusVenda.CANCELADO).all()
     vendas_aprovadas = [v for v in todas_vendas if v.status_venda == StatusVenda.APROVADO]
     vendas_pipeline  = [v for v in todas_vendas if v.status_venda in (
         StatusVenda.ORCAMENTO, StatusVenda.NEGOCIACAO
