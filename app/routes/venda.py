@@ -149,7 +149,7 @@ def aprovar_venda(venda_id: int, db: Session = Depends(get_db)):
             Colaborador.id_colaborador == venda.id_responsavel
         ).first()
 
-        ultima = db.query(PrestacaoContas).order_by(
+        ultima = db.query(PrestacaoContas).with_for_update().order_by(
             PrestacaoContas.id_prestacao.desc()
         ).first()
         numero = int(ultima.id_prestacao[2:]) + 1 if ultima else 1

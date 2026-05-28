@@ -1,7 +1,9 @@
+import logging
 import bcrypt
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from app.database import Base, engine, SessionLocal
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from app.database import Base, engine, SessionLocal, DATABASE_URL
 from app.models import cliente as _c
 from app.models import produto as _p
 from app.models import venda as _v
@@ -20,13 +22,22 @@ from app.routes import (
     prestacao_contas, dashboard, projeto, ordem_servico, usuario,
 )
 
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("solar")
+
+# ── Banco ─────────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
 
-from app.database import DATABASE_URL as _DB_URL
-print("=" * 60)
-print(f"  DATABASE: {'PostgreSQL' if _DB_URL.startswith('postgresql') else 'SQLite (FALLBACK!)'}")
-print(f"  URL prefix: {_DB_URL[:40]}...")
-print("=" * 60)
+db_type = "PostgreSQL" if DATABASE_URL.startswith("postgresql") else "SQLite (FALLBACK!)"
+logger.info("=" * 50)
+logger.info(f"  DATABASE: {db_type}")
+logger.info(f"  URL prefix: {DATABASE_URL[:40]}...")
+logger.info("=" * 50)
 
 
 def _seed_admin():
@@ -41,10 +52,7 @@ def _seed_admin():
                 perfil     = PerfilUsuario.ADMIN,
             ))
             db.commit()
-            print("=" * 50)
-            print("  Usuário admin criado com senha: solar123")
-            print("  Altere a senha após o primeiro acesso!")
-            print("=" * 50)
+            logger.info("Usuário admin criado com senha padrão 'solar123'")
     finally:
         db.close()
 
@@ -57,6 +65,22 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Sistema Solar", version="1.0", lifespan=lifespan)
 
+
+# ── Global exception handler ──────────────────────────────────────────────────
+@app.exception_handler(Exception)
+async def handle_unhandled_exception(request: Request, exc: Exception):
+    logger.error(
+        "Erro não tratado em %s %s: %s",
+        request.method, request.url.path, exc,
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Erro interno do servidor. Tente novamente."},
+    )
+
+
+# ── Rotas ─────────────────────────────────────────────────────────────────────
 app.include_router(cliente.router)
 app.include_router(produto.router)
 app.include_router(venda.router)
