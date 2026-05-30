@@ -12,6 +12,7 @@ router = APIRouter(prefix="/colaboradores", tags=["Colaboradores"])
 def gerar_id_colaborador(db: Session) -> str:
     ultimo = (
         db.query(Colaborador)
+        .with_for_update()
         .order_by(Colaborador.id_colaborador.desc())
         .first()
     )

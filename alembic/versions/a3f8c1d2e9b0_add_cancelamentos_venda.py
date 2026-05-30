@@ -19,7 +19,11 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    if 'cancelamentos_venda' not in inspect(bind).get_table_names():
+    tables = inspect(bind).get_table_names()
+    # Banco novo: vendas ainda não existe (create_all vai criar tudo com o schema atual)
+    if 'vendas' not in tables or 'usuarios' not in tables:
+        return
+    if 'cancelamentos_venda' not in tables:
         op.create_table(
             'cancelamentos_venda',
             sa.Column('id',                 sa.Integer(),   nullable=False),

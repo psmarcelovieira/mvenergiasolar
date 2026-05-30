@@ -98,6 +98,31 @@ def listar_lancamentos():
 def pagar_lancamento(lancamento_id: int):
     return requests.patch(f"{BASE_URL}/financeiro/{lancamento_id}/pagar")
 
+def cancelar_lancamento(lancamento_id: int):
+    return requests.patch(f"{BASE_URL}/financeiro/{lancamento_id}/cancelar")
+
+def editar_lancamento(lancamento_id: int, dados: dict):
+    return requests.patch(f"{BASE_URL}/financeiro/{lancamento_id}", json=dados)
+
+def criar_lancamento_lote(dados: dict):
+    return requests.post(f"{BASE_URL}/financeiro/lote", json=dados)
+
+def listar_mestres():
+    return _get(f"{BASE_URL}/financeiro/mestres")
+
+def buscar_mestre(mestre_id: int):
+    return _get(f"{BASE_URL}/financeiro/mestres/{mestre_id}")
+
+def editar_parcelas_futuras(mestre_id: int, dados: dict):
+    return requests.patch(f"{BASE_URL}/financeiro/mestres/{mestre_id}/parcelas-futuras", json=dados)
+
+def cancelar_serie(mestre_id: int, a_partir_de: str | None = None):
+    body = {"a_partir_de": a_partir_de} if a_partir_de else {}
+    return requests.post(f"{BASE_URL}/financeiro/mestres/{mestre_id}/cancelar-serie", json=body)
+
+def get_fluxo_caixa(meses: int = 6):
+    return _get(f"{BASE_URL}/dashboard/fluxo-caixa?meses={meses}")
+
 def saldo_produto(produto_id: int):
     return _get(f"{BASE_URL}/estoque/produtos/{produto_id}/saldo")
 

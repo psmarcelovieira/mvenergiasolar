@@ -149,7 +149,7 @@ def aprovar_venda(venda_id: int, db: Session = Depends(get_db)):
             Colaborador.id_colaborador == venda.id_responsavel
         ).first()
 
-        ultima = db.query(PrestacaoContas).order_by(
+        ultima = db.query(PrestacaoContas).with_for_update().order_by(
             PrestacaoContas.id_prestacao.desc()
         ).first()
         numero = int(ultima.id_prestacao[2:]) + 1 if ultima else 1
@@ -231,21 +231,23 @@ def cancelar_venda(venda_id: int, dados: CancelamentoRequest, db: Session = Depe
             ))
         estoque_revertido = True
 
-    # ── 5. Cancela lançamentos financeiros pendentes da venda ─────────────────
+    # ── 5. Estorna todos os lançamentos financeiros da venda ─────────────────
+    # Inclui PAGO e ATRASADO — a Despesa/Comissão criada ao pagar a prestação
+    # também fica vinculada ao id_venda e precisa ser revertida aqui.
     financeiro_tratado = False
     lancamentos = db.query(Financeiro).filter(
         Financeiro.id_venda == venda.id,
-        Financeiro.status_pagamento == StatusPagamento.PENDENTE,
+        Financeiro.status_pagamento != StatusPagamento.CANCELADO,
     ).all()
 
     for lanc in lancamentos:
         lanc.status_pagamento = StatusPagamento.CANCELADO
         financeiro_tratado = True
 
-    # ── 6. Cancela prestação de contas pendente ───────────────────────────────
+    # ── 6. Cancela prestação de contas (PENDENTE ou PAGA) ────────────────────
     prestacao = db.query(PrestacaoContas).filter(
         PrestacaoContas.id_venda == venda.id,
-        PrestacaoContas.status_pagto == StatusPrestacao.PENDENTE,
+        PrestacaoContas.status_pagto != StatusPrestacao.CANCELADA,
     ).first()
     if prestacao:
         prestacao.status_pagto = StatusPrestacao.CANCELADA
