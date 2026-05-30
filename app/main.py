@@ -11,6 +11,7 @@ from app.models import item_venda as _i
 from app.models import colaborador as _col
 from app.models import estoque as _e
 from app.models import financeiro as _f
+from app.models import lancamento_mestre as _lm
 from app.models import prestacao_contas as _pc
 from app.models import projeto as _proj
 from app.models import ordem_servico as _os

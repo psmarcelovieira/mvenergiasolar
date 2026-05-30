@@ -1,0 +1,443 @@
+{
+  "projeto": {
+    "nome": "MV Energia Solar",
+    "versao": "1.2",
+    "descricao": "Sistema de gestão para empresa de energia solar fotovoltaica. Controla clientes, vendas, estoque, financeiro, colaboradores, homologações e manutenções.",
+    "owner": "psmarcelovieira",
+    "ultima_atualizacao": "2026-05-27"
+  },
+
+  "infraestrutura": {
+    "backend": {
+      "framework": "FastAPI",
+      "linguagem": "Python 3.13",
+      "servidor": "Uvicorn",
+      "plataforma": "Railway",
+      "url": "https://mvenergiasolar-production.up.railway.app",
+      "branch_deploy": "main",
+      "start_command": "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT",
+      "restart_policy": "ON_FAILURE"
+    },
+    "banco_de_dados": {
+      "producao": "PostgreSQL (Railway — volume persistente)",
+      "desenvolvimento": "SQLite (solar.db) — fallback automático se DATABASE_URL ausente",
+      "orm": "SQLAlchemy",
+      "migrations": "Alembic — todas as migrations são idempotentes (guard por inspeção de tabelas/colunas)"
+    },
+    "frontend": {
+      "framework": "Streamlit",
+      "plataforma": "Streamlit Cloud",
+      "url": "https://mvenergiasolar.streamlit.app",
+      "comunicacao": "HTTP REST (requests)",
+      "navegacao": "st.navigation() com grupos temáticos (Streamlit >= 1.36)"
+    },
+    "scripts_utilitarios": {
+      "migrar_para_producao.py": "Migração única SQLite→API + Excel→API. Parte 1: clientes, produtos, colaboradores, projetos, OS, financeiro do solar.db. Parte 2: projetos de homologação da planilha CONTROLE DE PROJETOS.xlsx",
+      "iniciar.bat": "Sobe uvicorn + streamlit localmente e abre o navegador"
+    },
+    "observabilidade": {
+      "logging": "logging.basicConfig(level=INFO) em app/main.py — registra startup (banco ativo), erros não tratados",
+      "exception_handler": "Global handler (@app.exception_handler(Exception)) retorna JSON {detail: 'Erro interno...'} com status 500 e loga traceback completo",
+      "indicador_banco": "Log no startup informa 'DATABASE: PostgreSQL' ou 'DATABASE: SQLite (FALLBACK!)' para diagnóstico rápido"
+    }
+  },
+
+  "autenticacao": {
+    "tipo": "Login/senha via POST /usuarios/login",
+    "hash": "bcrypt",
+    "sessao": "st.session_state (Streamlit)",
+    "perfis": ["Admin", "Vendedor"],
+    "usuario_padrao": { "login": "admin", "senha": "solar123" },
+    "seed_admin": "Admin criado automaticamente no primeiro start via lifespan se não houver usuários",
+    "protecao_brute_force": {
+      "max_tentativas": 5,
+      "bloqueio_minutos": 5,
+      "comportamento": "Após 5 tentativas falhas o campo bloqueado_ate é setado para now() + 5min. Login retorna HTTP 429 enquanto bloqueado. Sucesso reseta tentativas_falhas e atualiza ultimo_login."
+    },
+    "cancelamento_exige_admin": "Endpoint POST /vendas/{id}/cancelar valida credenciais bcrypt do autorizador em tempo real e verifica perfil Admin"
+  },
+
+  "modelos": {
+    "clientes": {
+      "tabela": "clientes",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "status":        { "tipo": "Enum(StatusCliente)", "nullable": false, "default": "Ativo" },
+        "tipo_pessoa":   { "tipo": "Enum(TipoPessoa)",    "nullable": false, "default": "PF" },
+        "nome":          { "tipo": "String(150)",         "nullable": false },
+        "cpf_cnpj":      { "tipo": "String(14)",          "nullable": true,  "unique": true },
+        "email":         { "tipo": "String(100)",         "nullable": true },
+        "telefone":      { "tipo": "String(20)",          "nullable": true },
+        "cidade":        { "tipo": "String(100)",         "nullable": true },
+        "uf":            { "tipo": "String(2)",           "nullable": true },
+        "data_cadastro": { "tipo": "Date",                "nullable": false },
+        "profissao":     { "tipo": "String(100)",         "nullable": true },
+        "renda_mensal":  { "tipo": "Numeric(12,2)",       "nullable": true },
+        "escolaridade":  { "tipo": "Enum(Escolaridade)",  "nullable": true },
+        "conta_energia": { "tipo": "Numeric(10,2)",       "nullable": true },
+        "tipo_imovel":   { "tipo": "Enum(TipoImovel)",    "nullable": true },
+        "origem_lead":   { "tipo": "Enum(OrigemLead)",    "nullable": true },
+        "endereco":      { "tipo": "String(200)",         "nullable": true },
+        "bairro":        { "tipo": "String(100)",         "nullable": true }
+      },
+      "nota_cpf_cnpj": "Único apenas quando não nulo. Validador extrai somente dígitos (11=CPF, 14=CNPJ)."
+    },
+
+    "produtos": {
+      "tabela": "produtos",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "codigo":          { "tipo": "String(20)",            "nullable": false, "unique": true },
+        "nome":            { "tipo": "String(150)",           "nullable": false },
+        "categoria":       { "tipo": "Enum(CategoriaProduto)","nullable": false },
+        "unidade":         { "tipo": "Enum(UnidadeProduto)",  "nullable": false },
+        "fabricante":      { "tipo": "String(100)",           "nullable": true },
+        "modelo":          { "tipo": "String(100)",           "nullable": true },
+        "potencia_w":      { "tipo": "Numeric(10,2)",         "nullable": true },
+        "custo_unitario":  { "tipo": "Numeric(10,2)",         "nullable": false },
+        "preco_venda":     { "tipo": "Numeric(10,2)",         "nullable": false },
+        "qtd_minima":      { "tipo": "Integer",               "nullable": false, "default": 0 }
+      },
+      "propriedades_calculadas": {
+        "margem_pct":      "(preco_venda - custo_unitario) / preco_venda",
+        "qtd_estoque":     "soma das movimentações com sinal (Entrada/Ajuste+ = +1, Saída/Ajuste- = -1)",
+        "alerta_estoque":  "qtd_estoque < qtd_minima"
+      }
+    },
+
+    "vendas": {
+      "tabela": "vendas",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "cliente_id":       { "tipo": "Integer FK→clientes",        "nullable": false },
+        "id_responsavel":   { "tipo": "String(6) FK→colaboradores", "nullable": true },
+        "data_orcamento":   { "tipo": "Date",                       "nullable": false },
+        "data_aprovacao":   { "tipo": "Date",                       "nullable": true },
+        "status_venda":     { "tipo": "Enum(StatusVenda)",          "nullable": false, "default": "Orçamento" },
+        "valor_instalacao": { "tipo": "Numeric(10,2)",              "default": 0 },
+        "desconto":         { "tipo": "Numeric(10,2)",              "default": 0 },
+        "forma_pagamento":  { "tipo": "Enum(FormaPagamento)",       "nullable": false },
+        "parcelas":         { "tipo": "Integer",                    "default": 1 },
+        "observacoes":      { "tipo": "Text",                       "nullable": true }
+      },
+      "propriedades_calculadas": {
+        "valor_equipamentos": "soma dos subtotais dos itens",
+        "valor_final":        "valor_equipamentos + valor_instalacao - desconto"
+      }
+    },
+
+    "itens_venda": {
+      "tabela": "itens_venda",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "venda_id":       { "tipo": "Integer FK→vendas",   "nullable": false },
+        "produto_id":     { "tipo": "Integer FK→produtos", "nullable": false },
+        "quantidade":     { "tipo": "Numeric(10,3)",       "nullable": false },
+        "preco_unitario": { "tipo": "Numeric(10,2)",       "nullable": false }
+      },
+      "propriedades_calculadas": {
+        "subtotal": "quantidade * preco_unitario"
+      }
+    },
+
+    "cancelamentos_venda": {
+      "tabela": "cancelamentos_venda",
+      "pk": "id (Integer, auto)",
+      "nota": "Trilha de auditoria imutável. Gerada automaticamente por POST /vendas/{id}/cancelar.",
+      "unique_constraint": "venda_id — apenas um registro por venda",
+      "campos": {
+        "venda_id":           { "tipo": "Integer FK→vendas",   "nullable": false, "unique": true },
+        "solicitante_id":     { "tipo": "Integer FK→usuarios", "nullable": false },
+        "autorizador_id":     { "tipo": "Integer FK→usuarios", "nullable": false },
+        "motivo":             { "tipo": "Text",                "nullable": false, "min_len": 10 },
+        "data_cancelamento":  { "tipo": "DateTime",            "default": "datetime.now()" },
+        "estoque_revertido":  { "tipo": "Boolean",             "default": false },
+        "financeiro_tratado": { "tipo": "Boolean",             "default": false }
+      },
+      "propriedades_calculadas": {
+        "solicitante_nome": "via relationship → usuarios.nome",
+        "autorizador_nome": "via relationship → usuarios.nome"
+      }
+    },
+
+    "colaboradores": {
+      "tabela": "colaboradores",
+      "pk": "id_colaborador (String(6), gerado automaticamente — ex: COL001)",
+      "geracao_id": "SELECT com with_for_update() para evitar race condition em inserts simultâneos",
+      "campos": {
+        "nome":                { "tipo": "String(150)",            "nullable": false },
+        "cpf":                 { "tipo": "String(14)",             "nullable": true, "unique": true },
+        "cargo":               { "tipo": "String(100)",            "nullable": true },
+        "tipo_contrato":       { "tipo": "Enum(TipoContrato)",     "nullable": false },
+        "percentual_comissao": { "tipo": "Numeric(5,4)",           "nullable": false },
+        "telefone":            { "tipo": "String(20)",             "nullable": true },
+        "email":               { "tipo": "String(100)",            "nullable": true },
+        "data_admissao":       { "tipo": "Date",                   "nullable": false },
+        "status":              { "tipo": "Enum(StatusColaborador)","default": "Ativo" },
+        "observacoes":         { "tipo": "Text",                   "nullable": true }
+      }
+    },
+
+    "estoque_movimentacoes": {
+      "tabela": "estoque_movimentacoes",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "data":           { "tipo": "DateTime",              "default": "now()" },
+        "tipo_mov":       { "tipo": "Enum(TipoMovimento)",   "nullable": false },
+        "id_produto":     { "tipo": "Integer FK→produtos",   "nullable": false },
+        "quantidade":     { "tipo": "Numeric(10,3)",         "nullable": false },
+        "valor_unitario": { "tipo": "Numeric(10,2)",         "nullable": false },
+        "id_venda":       { "tipo": "Integer FK→vendas",     "nullable": true },
+        "responsavel":    { "tipo": "String(150)",           "nullable": true },
+        "observacoes":    { "tipo": "Text",                  "nullable": true }
+      },
+      "propriedades_calculadas": {
+        "sinal":       "+1 para Entrada/Ajuste+, -1 para Saída/Ajuste-",
+        "valor_total": "quantidade * valor_unitario"
+      }
+    },
+
+    "financeiro": {
+      "tabela": "financeiro",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "tipo":             { "tipo": "Enum(TipoLancamento)",     "nullable": false },
+        "categoria":        { "tipo": "Enum(CategoriaFinanceiro)","nullable": false },
+        "descricao":        { "tipo": "String(200)",              "nullable": false },
+        "valor":            { "tipo": "Numeric(10,2)",            "nullable": false },
+        "data_vencimento":  { "tipo": "Date",                     "nullable": false },
+        "data_pagamento":   { "tipo": "Date",                     "nullable": true },
+        "status_pagamento": { "tipo": "Enum(StatusPagamento)",    "default": "Pendente" },
+        "forma_pagamento":  { "tipo": "Enum(FormaPagamento)",     "nullable": false },
+        "id_venda":         { "tipo": "Integer FK→vendas",        "nullable": true },
+        "observacoes":      { "tipo": "Text",                     "nullable": true }
+      }
+    },
+
+    "prestacao_contas": {
+      "tabela": "prestacao_contas",
+      "pk": "id_prestacao (String(7), gerado automaticamente — ex: PC0001)",
+      "geracao_id": "SELECT com with_for_update() para evitar race condition em inserts simultâneos",
+      "campos": {
+        "data":                { "tipo": "Date",                       "nullable": false },
+        "id_venda":            { "tipo": "Integer FK→vendas",          "nullable": false },
+        "id_colaborador":      { "tipo": "String(6) FK→colaboradores", "nullable": false },
+        "valor_recebido":      { "tipo": "Numeric(10,2)",              "nullable": false },
+        "custo_instalacao":    { "tipo": "Numeric(10,2)",              "default": 0 },
+        "percentual_comissao": { "tipo": "Numeric(5,4)",               "nullable": false },
+        "status_pagto":        { "tipo": "Enum(StatusPrestacao)",      "default": "Pendente" },
+        "data_pagto":          { "tipo": "Date",                       "nullable": true },
+        "observacoes":         { "tipo": "Text",                       "nullable": true }
+      },
+      "propriedades_calculadas": {
+        "valor_comissao": "valor_recebido * percentual_comissao",
+        "valor_liquido":  "valor_recebido - valor_comissao"
+      }
+    },
+
+    "projetos_homologacao": {
+      "tabela": "projetos_homologacao",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "cliente_id":      { "tipo": "Integer FK→clientes",  "nullable": true },
+        "uc":              { "tipo": "String(50)",           "nullable": true },
+        "data_entrada":    { "tipo": "Date",                 "nullable": true },
+        "data_resultado":  { "tipo": "Date",                 "nullable": true },
+        "protocolo":       { "tipo": "String(50)",           "nullable": true },
+        "status_projeto":  { "tipo": "Enum(StatusProjeto)",  "default": "Em Análise" },
+        "status_vistoria": { "tipo": "Enum(StatusVistoria)", "default": "Não Solicitado" },
+        "kwp":             { "tipo": "Numeric(8,3)",         "nullable": true },
+        "inversor":        { "tipo": "String(100)",          "nullable": true },
+        "observacoes":     { "tipo": "Text",                 "nullable": true }
+      }
+    },
+
+    "ordens_servico": {
+      "tabela": "ordens_servico",
+      "pk": "id_os (String(6), manual — ex: OS0001)",
+      "campos": {
+        "cliente_id":       { "tipo": "Integer FK→clientes",        "nullable": true },
+        "id_tecnico":       { "tipo": "String(6) FK→colaboradores", "nullable": true },
+        "tipo_servico":     { "tipo": "Enum(TipoServico)",          "nullable": false },
+        "descricao":        { "tipo": "Text",                       "nullable": false },
+        "status_os":        { "tipo": "Enum(StatusOS)",             "default": "Aberta" },
+        "data_abertura":    { "tipo": "Date",                       "nullable": false },
+        "data_agendamento": { "tipo": "Date",                       "nullable": true },
+        "data_conclusao":   { "tipo": "Date",                       "nullable": true },
+        "forma_pagamento":  { "tipo": "Enum(FormaPagamento)",       "default": "PIX" },
+        "custo_total":      { "tipo": "Numeric(10,2)",              "nullable": true },
+        "observacoes":      { "tipo": "Text",                       "nullable": true }
+      }
+    },
+
+    "usuarios": {
+      "tabela": "usuarios",
+      "pk": "id (Integer, auto)",
+      "campos": {
+        "nome":               { "tipo": "String(100)",          "nullable": false },
+        "login":              { "tipo": "String(50)",           "nullable": false, "unique": true },
+        "senha_hash":         { "tipo": "String(200)",          "nullable": false, "nota": "bcrypt" },
+        "perfil":             { "tipo": "Enum(PerfilUsuario)",  "default": "Vendedor" },
+        "colaborador_id":     { "tipo": "String(6) FK→colaboradores", "nullable": true, "nota": "vínculo opcional com colaborador físico" },
+        "ultimo_login":       { "tipo": "DateTime",             "nullable": true },
+        "tentativas_falhas":  { "tipo": "Integer",              "nullable": false, "default": 0 },
+        "bloqueado_ate":      { "tipo": "DateTime",             "nullable": true }
+      },
+      "constantes": {
+        "MAX_TENTATIVAS": 5,
+        "BLOQUEIO_MINUTOS": 5
+      }
+    }
+  },
+
+  "enums": {
+    "StatusCliente":       ["Ativo", "Inativo", "Prospecto", "Bloqueado"],
+    "TipoPessoa":          ["PF", "PJ"],
+    "Escolaridade":        ["Fundamental", "Médio", "Superior", "Pós-graduação"],
+    "TipoImovel":          ["Residencial", "Comercial", "Rural", "Industrial"],
+    "OrigemLead":          ["Indicação", "Google", "Instagram", "Facebook", "WhatsApp", "Site", "Evento", "Outros"],
+    "CategoriaProduto":    ["Painel", "Inversor", "Cabo", "Estrutura", "Acessório", "Serviço"],
+    "UnidadeProduto":      ["UN", "M", "KG", "KWP"],
+    "StatusVenda":         ["Orçamento", "Negociação", "Aprovado", "Em Andamento", "Concluído", "Cancelado"],
+    "FormaPagamento":      ["PIX", "Boleto", "Dinheiro", "Cartão", "Financiamento"],
+    "TipoContrato":        ["CLT", "Autônomo", "PJ"],
+    "StatusColaborador":   ["Ativo", "Inativo"],
+    "TipoMovimento":       ["Entrada", "Saída", "Ajuste+", "Ajuste-"],
+    "TipoLancamento":      ["Receita", "Despesa"],
+    "CategoriaFinanceiro": ["Venda Equipamentos", "Serviço Instalação", "Manutenção", "Comissão", "Fornecedor", "Salário", "Aluguel", "Marketing", "Imposto", "Outras"],
+    "StatusPagamento":     ["Pendente", "Pago", "Atrasado", "Cancelado"],
+    "StatusPrestacao":     ["Pendente", "Paga", "Cancelada"],
+    "StatusProjeto":       ["Em Análise", "Aprovado", "Aprovado c/ Obras", "Falta TRT", "Cancelado"],
+    "StatusVistoria":      ["Não Solicitado", "Solicitado", "Realizado"],
+    "TipoServico":         ["Preventiva", "Corretiva", "Limpeza", "Inspeção", "Garantia", "Outros"],
+    "StatusOS":            ["Aberta", "Em Andamento", "Concluída", "Cancelada"],
+    "PerfilUsuario":       ["Admin", "Vendedor"]
+  },
+
+  "api_endpoints": {
+    "dashboard": {
+      "GET /dashboard/": "Métricas: total_vendas (exclui CANCELADO), receita_aprovada, pipeline (Orçamento+Negociação), saldo_financeiro (receitas_pagas - despesas_pagas), ticket_medio, itens_em_alerta, valor_em_estoque"
+    },
+    "clientes": {
+      "GET    /clientes/":     "Lista todos os clientes",
+      "POST   /clientes/":     "Cria cliente (valida CPF único se não nulo)",
+      "GET    /clientes/{id}": "Busca cliente por ID",
+      "PATCH  /clientes/{id}": "Atualiza campos do cliente",
+      "DELETE /clientes/{id}": "Remove cliente (bloqueia se tiver vendas)"
+    },
+    "produtos": {
+      "GET    /produtos/":     "Lista todos os produtos",
+      "POST   /produtos/":     "Cria produto",
+      "GET    /produtos/{id}": "Busca produto por ID",
+      "PATCH  /produtos/{id}": "Atualiza produto",
+      "DELETE /produtos/{id}": "Remove produto"
+    },
+    "vendas": {
+      "GET    /vendas/":                     "Lista todas as vendas (com itens e cliente)",
+      "POST   /vendas/":                     "Cria venda em status Orçamento com itens (NÃO baixa estoque)",
+      "GET    /vendas/{id}":                 "Busca venda por ID",
+      "PATCH  /vendas/{id}/aprovar":         "Aprova venda: valida estoque, baixa estoque (Saída), cria lançamentos financeiros (Equipamentos + Instalação), cria PrestacaoContas se houver responsável",
+      "DELETE /vendas/{id}":                 "Remove venda — somente se status = Orçamento",
+      "POST   /vendas/{id}/cancelar":        "Cancela venda com autorização Admin: valida credenciais bcrypt do autorizador, reverte estoque se aprovada/em andamento/concluída, cancela lançamentos financeiros PENDENTE, cancela prestação PENDENTE, grava CancelamentoVenda",
+      "GET    /vendas/{id}/cancelamento":    "Retorna trilha de auditoria do cancelamento"
+    },
+    "colaboradores": {
+      "GET    /colaboradores/":      "Lista colaboradores",
+      "POST   /colaboradores/":      "Cria colaborador (ID gerado: COL001, COL002...)",
+      "GET    /colaboradores/{id}":  "Busca colaborador por ID",
+      "PATCH  /colaboradores/{id}":  "Atualiza colaborador",
+      "DELETE /colaboradores/{id}":  "Remove colaborador (bloqueia se tiver vendas associadas)"
+    },
+    "estoque": {
+      "GET  /estoque/produtos/{id}/saldo": "Retorna saldo atual do produto",
+      "POST /estoque/movimentacoes":        "Registra movimentação manual (Entrada/Saída/Ajuste+/Ajuste-)"
+    },
+    "financeiro": {
+      "GET   /financeiro/":           "Lista lançamentos",
+      "POST  /financeiro/":           "Cria lançamento manual",
+      "PATCH /financeiro/{id}/pagar": "Marca lançamento como Pago"
+    },
+    "prestacoes": {
+      "GET   /prestacoes/":              "Lista prestações de contas",
+      "PATCH /prestacoes/{id}/pagar":    "Marca prestação como Paga e cria lançamento de Despesa/Comissão automaticamente"
+    },
+    "projetos": {
+      "GET    /projetos/":     "Lista projetos de homologação",
+      "POST   /projetos/":     "Cria projeto",
+      "PATCH  /projetos/{id}": "Atualiza projeto",
+      "DELETE /projetos/{id}": "Remove projeto"
+    },
+    "ordens_servico": {
+      "GET    /ordens-servico/":     "Lista ordens de serviço",
+      "POST   /ordens-servico/":     "Cria OS (ID gerado: OS0001, OS0002...)",
+      "PATCH  /ordens-servico/{id}": "Atualiza OS — ao concluir com custo_total, cria lançamento Receita/Manutenção (exceto tipo Garantia)",
+      "DELETE /ordens-servico/{id}": "Remove OS"
+    },
+    "usuarios": {
+      "POST   /usuarios/login":    "Autentica com proteção brute-force: HTTP 429 após 5 tentativas, bloqueio 5 min. Sucesso atualiza ultimo_login.",
+      "GET    /usuarios/":         "Lista usuários",
+      "POST   /usuarios/":         "Cria usuário",
+      "PATCH  /usuarios/{id}":     "Atualiza usuário (senha re-hasheada automaticamente)",
+      "DELETE /usuarios/{id}":     "Remove usuário (bloqueia se for o último)"
+    }
+  },
+
+  "frontend_paginas": {
+    "estrutura": "st.navigation() com grupos temáticos. Login centralizado em app.py — nenhuma página individual faz verificação de auth.",
+    "app.py": "Tela de login + configuração de navegação por grupos. Admin vê Financeiro e Administração; Vendedor não vê essas seções.",
+    "grupos": {
+      "Início": {
+        "dashboard.py": "KPIs: total_vendas, receita_aprovada, pipeline, saldo_financeiro, ticket_medio, itens_em_alerta, valor_em_estoque"
+      },
+      "Comercial": {
+        "01_Clientes.py":      "Lista, busca por nome/status/cidade, cadastro, edição e exclusão de clientes",
+        "02_Vendas.py":        "Lista de vendas, criação de orçamento com itens, aprovação, cancelamento de venda",
+        "10_Ficha_Cliente.py": "Ficha completa do cliente com histórico de vendas e projetos",
+        "11_Prospeccao.py":    "Visualização de leads e prospecção"
+      },
+      "Operações": {
+        "07_Projetos.py":   "Acompanhamento de projetos de homologação junto à concessionária",
+        "08_Manutencao.py": "Ordens de serviço (preventiva, corretiva, limpeza, inspeção, garantia)",
+        "03_Estoque.py":    "Saldo por produto, registro de movimentações manuais (entrada/saída/ajuste)"
+      },
+      "Relatórios": {
+        "12_Relatorios.py": "Geração de relatórios em PDF",
+        "14_Previsao.py":   "Previsão de demanda/receita"
+      },
+      "Financeiro (apenas Admin)": {
+        "04_Financeiro.py": "Lançamentos de receita/despesa, marcar como pago",
+        "05_Prestacoes.py": "Prestações de contas de colaboradores, marcar como paga"
+      },
+      "Administração (apenas Admin)": {
+        "06_Colaboradores.py": "Cadastro e gestão de colaboradores",
+        "09_Usuarios.py":      "Gestão de usuários do sistema",
+        "13_Importacao.py":    "Importação de dados em lote"
+      }
+    }
+  },
+
+  "migrations_alembic": {
+    "99ff0d254eb1": "Estado inicial — todas as tabelas base",
+    "d8111f366e8c": "Adiciona tabela usuarios",
+    "b7e2a4f1c5d3": "Auth profissional: adiciona colaborador_id, ultimo_login, tentativas_falhas, bloqueado_ate em usuarios — idempotente (guard por coluna)",
+    "a3f8c1d2e9b0": "Cria tabela cancelamentos_venda — idempotente (guard: pula se vendas ou usuarios ainda não existem; pula se cancelamentos_venda já existe)",
+    "nota": "Todas as migrations verificam existência de tabelas/colunas antes de agir. Em banco novo, create_all() cria o schema completo e as migrations retornam sem fazer nada."
+  },
+
+  "regras_de_negocio": {
+    "cpf_cnpj": "Único somente quando preenchido. Validado como CPF (11 dígitos) ou CNPJ (14 dígitos). Armazenado apenas com dígitos.",
+    "venda_criacao": "POST /vendas/ cria venda em status Orçamento. NÃO movimenta estoque nem gera lançamentos financeiros.",
+    "venda_aprovacao": "PATCH /aprovar: (1) valida estoque de todos os itens, (2) baixa estoque como Saída, (3) cria lançamento Receita/Venda Equipamentos, (4) cria lançamento Receita/Serviço Instalação se valor_instalacao > 0, (5) cria PrestacaoContas se id_responsavel preenchido.",
+    "venda_cancelamento": "POST /cancelar: requer login+senha bcrypt de um autorizador Admin. Reverte estoque (movimentação de Entrada/Estorno) se status era Aprovado/Em Andamento/Concluído. Cancela todos os lançamentos financeiros PENDENTE da venda. Cancela prestação PENDENTE. Grava CancelamentoVenda imutável.",
+    "venda_exclusao": "DELETE /vendas/{id} permitido somente se status = Orçamento.",
+    "dashboard_total_vendas": "Exclui vendas com status CANCELADO da contagem e dos valores.",
+    "prestacao_contas": "Gerada automaticamente na aprovação da venda. comissao = valor_recebido × percentual_comissao. Ao pagar (PATCH /pagar), cria automaticamente lançamento Despesa/Comissão.",
+    "estoque_alerta": "Produto entra em alerta quando qtd_estoque < qtd_minima.",
+    "os_conclusao": "Ao concluir OS com custo_total preenchido, cria lançamento Receita/Manutenção automaticamente. Tipo Garantia é exceção — não gera lançamento.",
+    "usuario_admin_seed": "Admin criado no primeiro start via lifespan. login=admin, senha=solar123.",
+    "usuario_ultimo": "Não é possível excluir o último usuário do sistema.",
+    "id_colaborador": "PK String(6) gerado sequencialmente com with_for_update() (ex: COL001).",
+    "id_os": "PK String(6) gerado sequencialmente (ex: OS0001).",
+    "id_prestacao": "PK String(7) gerado sequencialmente com with_for_update() (ex: PC0001)."
+  }
+}

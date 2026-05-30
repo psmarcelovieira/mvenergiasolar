@@ -148,3 +148,9 @@ class StatusOS(enum.Enum):
 class PerfilUsuario(enum.Enum):
     ADMIN    = "Admin"
     VENDEDOR = "Vendedor"
+
+
+class TipoRecorrencia(enum.Enum):
+    UNICO      = "Único"
+    PARCELADO  = "Parcelado"
+    RECORRENTE = "Recorrente"
