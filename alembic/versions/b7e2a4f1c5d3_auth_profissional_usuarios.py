@@ -27,11 +27,9 @@ def upgrade() -> None:
     existing = {c['name'] for c in inspector.get_columns('usuarios')}
 
     if 'colaborador_id' not in existing:
-        op.add_column('usuarios', sa.Column(
-            'colaborador_id', sa.String(6),
-            sa.ForeignKey('colaboradores.id_colaborador'),
-            nullable=True,
-        ))
+        # FK constraint omitido: não suportado em ALTER TABLE no SQLite.
+        # PostgreSQL recebe o FK via create_all no banco novo; ORM declara o relacionamento.
+        op.add_column('usuarios', sa.Column('colaborador_id', sa.String(6), nullable=True))
     if 'ultimo_login' not in existing:
         op.add_column('usuarios', sa.Column('ultimo_login', sa.DateTime(), nullable=True))
     if 'tentativas_falhas' not in existing:

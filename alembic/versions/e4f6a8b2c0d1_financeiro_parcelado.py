@@ -12,7 +12,7 @@ from sqlalchemy import inspect
 
 
 revision: str = 'e4f6a8b2c0d1'
-down_revision: Union[str, Sequence[str], None] = 'a3f8c1d2e9b0'
+down_revision: Union[str, Sequence[str], None] = 'b7e2a4f1c5d3'
 branch_labels = None
 depends_on = None
 
@@ -52,11 +52,8 @@ def upgrade() -> None:
     existing_cols = {c['name'] for c in inspector.get_columns('financeiro')}
 
     if 'lancamento_mestre_id' not in existing_cols:
-        op.add_column(
-            'financeiro',
-            sa.Column('lancamento_mestre_id', sa.Integer(),
-                      sa.ForeignKey('lancamentos_mestre.id'), nullable=True),
-        )
+        # FK omitido: não suportado em ALTER TABLE no SQLite.
+        op.add_column('financeiro', sa.Column('lancamento_mestre_id', sa.Integer(), nullable=True))
 
     if 'parcela_num' not in existing_cols:
         op.add_column('financeiro', sa.Column('parcela_num',   sa.Integer(), nullable=True))
