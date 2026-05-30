@@ -6,8 +6,7 @@ def verificar_auth():
     """Redireciona para login se não estiver autenticado."""
     if "usuario" not in st.session_state:
         st.warning("Faça login para acessar o sistema.")
-        st.switch_page("app.py")
-        st.stop()
+        st.rerun()
     return st.session_state["usuario"]
 
 
@@ -46,4 +45,4 @@ def rodape_usuario():
         )
         if st.button("Sair", key="btn_logout_sidebar", use_container_width=True):
             del st.session_state["usuario"]
-            st.switch_page("app.py")
+            st.rerun()
